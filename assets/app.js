@@ -1,11 +1,13 @@
-/* ВОЛГАСТРОЙ 76 — логика сайта.
-   Ванильный JS, без сборки. 3D подключается лениже и только если устройство тянет. */
+/* ВОЛГАСТРОЙ 76 — логика сайта (v3).
+   Ванильный JS, без сборки и внешних библиотек — спокойно живёт на любом PHP-хостинге.
+   Вместо «игрового» 3D — инженерные эскизы-чертежи на SVG: лёгкие и мгновенные. */
 (function(){
 'use strict';
 
 var $  = function(s,c){ return (c||document).querySelector(s); };
 var $$ = function(s,c){ return Array.prototype.slice.call((c||document).querySelectorAll(s)); };
-var fmtR = function(n){ return Math.round(n).toLocaleString('ru-RU') + ' \u20BD'; };
+var fmtR = function(n){ return Math.round(n).toLocaleString('ru-RU') + ' ₽'; };
+var reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* ===================== ШАПКА / МЕНЮ ===================== */
 var header = $('header'), burger = $('#burger'), mmenu = $('#mmenu');
@@ -50,8 +52,36 @@ var io = new IntersectionObserver(function(es){
   es.forEach(function(e){
     if(e.isIntersecting){ e.target.classList.add('vis'); io.unobserve(e.target); }
   });
-}, { threshold:.1, rootMargin:'0px 0px -40px 0px' });
+}, { threshold:.08, rootMargin:'0px 0px -40px 0px' });
 $$('.rv').forEach(function(el){ io.observe(el); });
+
+/* ===================== ПАРАЛЛАКС В ГЕРОЕ ===================== */
+(function(){
+  var hero = $('.hero'), bg = $('#heroBg');
+  if(!hero || !bg || reduceMotion) return;
+  if(!(window.matchMedia && matchMedia('(pointer:fine)').matches)) return;
+  var mx = 0, my = 0, cx = 0, cy = 0, sy = 0, raf = null;
+  function loop(){
+    cx += (mx - cx) * .06;
+    cy += (my - cy) * .06;
+    bg.style.transform = 'translate3d(' + cx.toFixed(2) + 'px,' + (cy + sy).toFixed(2) + 'px,0)';
+    if(Math.abs(mx - cx) > .05 || Math.abs(my - cy) > .05 || Math.abs(sy) > .3){
+      raf = requestAnimationFrame(loop);
+    } else raf = null;
+  }
+  function kick(){ if(!raf) raf = requestAnimationFrame(loop); }
+  hero.addEventListener('mousemove', function(e){
+    var r = hero.getBoundingClientRect();
+    mx = ((e.clientX - r.left) / r.width  - .5) * -14;
+    my = ((e.clientY - r.top)  / r.height - .5) * -10;
+    kick();
+  }, {passive:true});
+  window.addEventListener('scroll', function(){
+    var y = window.pageYOffset || 0;
+    sy = Math.min(y * .16, 140);
+    kick();
+  }, {passive:true});
+})();
 
 /* ===================== ЛАЙТБОКС ===================== */
 var lb = $('#lb'), lbImg = $('#lb-img'), lbCap = $('#lb-cap');
@@ -120,14 +150,14 @@ function bindRange(rid, oid, suffix){
   });
 }
 
-var gHouseMat = optGroup('opt-house-mat', function(){ calc(); sync3D(true); });
-var gHouseKit = optGroup('opt-house-kit', function(){ calc(); sync3D(true); });
-var gPoolPav  = optGroup('opt-pool-pav',  function(){ calc(); sync3D(true); });
-var gDeckLay  = optGroup('opt-deck-lay',  function(){ calc(); sync3D(true); });
-var gNetType  = optGroup('opt-net-type',  function(){ calc(); sync3D(true); });
-var gNetDeep  = optGroup('opt-net-deep',  function(){ calc(); sync3D(true); });
-var gPileDia  = optGroup('opt-pile-dia',  function(){ calc(); sync3D(true); });
-var gFinLvl   = optGroup('opt-fin-lvl',   function(){ calc(); sync3D(true); });
+var gHouseMat = optGroup('opt-house-mat', function(){ calc(); queueBP(); });
+var gHouseKit = optGroup('opt-house-kit', function(){ calc(); queueBP(); });
+var gPoolPav  = optGroup('opt-pool-pav',  function(){ calc(); queueBP(); });
+var gDeckLay  = optGroup('opt-deck-lay',  function(){ calc(); queueBP(); });
+var gNetType  = optGroup('opt-net-type',  function(){ calc(); queueBP(); });
+var gNetDeep  = optGroup('opt-net-deep',  function(){ calc(); queueBP(); });
+var gPileDia  = optGroup('opt-pile-dia',  function(){ calc(); queueBP(); });
+var gFinLvl   = optGroup('opt-fin-lvl',   function(){ calc(); queueBP(); });
 
 bindRange('r-house-area','o-house-area','м²');
 bindRange('r-deck-area','o-deck-area','м²');
@@ -136,15 +166,14 @@ bindRange('r-pile-n','o-pile-n','шт');
 bindRange('r-pile-rost','o-pile-rost','м');
 bindRange('r-fin-area','o-fin-area','м²');
 
-// 3D пересобираем не на каждый пиксель слайдера, а с паузой
-var reTimer = null;
+// чертёж перерисовываем не на каждый пиксель слайдера, а с паузой
+var bpTimer = null;
+function queueBP(){ clearTimeout(bpTimer); bpTimer = setTimeout(drawBP, 150); }
 $$('input[type=range]').forEach(function(r){
-  r.addEventListener('input', function(){
-    clearTimeout(reTimer); reTimer = setTimeout(function(){ sync3D(true); }, 190);
-  });
+  r.addEventListener('input', queueBP);
 });
 $$('.calc-in input[type=checkbox]').forEach(function(c){
-  c.addEventListener('change', function(){ calc(); sync3D(true); });
+  c.addEventListener('change', function(){ calc(); queueBP(); });
 });
 function isOn(id){ var el = document.getElementById(id); return !!(el && el.checked); }
 function rv(id){ var el = document.getElementById(id); return el ? +el.value : 0; }
@@ -159,7 +188,7 @@ function activateTab(name){
   });
   $$('.tabpane').forEach(function(p){ p.hidden = true; });
   document.getElementById('pane-'+name).hidden = false;
-  calc(); sync3D(true);
+  calc(); queueBP();
 }
 $$('.calc-tabs button').forEach(function(b){
   b.addEventListener('click', function(){ activateTab(b.dataset.tab); });
@@ -173,7 +202,6 @@ $$('[data-goto]').forEach(function(a){
 });
 
 var NET_NAMES = { 2800:'Канализация К1', 2300:'Водопровод В1', 3500:'ГВС / теплосеть', 2000:'Дренаж' };
-var NET_KEYS  = { 2800:'k1', 2300:'v1', 3500:'gvs', 2000:'dren' };
 var DIA_NAMES = { 900:'Ø57', 1100:'Ø76', 1350:'Ø89', 1700:'Ø108' };
 var FIN_NAMES = { 4000:'Черновая', 7500:'Чистовая', 12000:'Под ключ' };
 
@@ -469,7 +497,7 @@ function calc(){
       Fl.push(['Шпаклёвка и шлифовка под покраску', wallF, 'м²', lvl === 2 ? .15 : .11]);
       Fl.push(['Финишное покрытие стен', wallF, 'м²', lvl === 2 ? .11 : .09]);
       Fl.push(['Укладка напольного покрытия', af, 'м²', lvl === 2 ? .11 : .09]);
-      Fl.push(['Монтаж плинтуса и наличников', perimF, 'м.п.', .05]);
+      Fl.push(['Монтаж плинтуса и наличников', perimF, 'м.п.', lvl === 2 ? .05 : .05]);
     }
     if(lvl >= 3){
       Fl.push(['Монтаж межкомнатных дверей', Math.max(2, Math.round(af / 22)), 'шт', .09]);
@@ -554,154 +582,377 @@ function calcText(){
   return t;
 }
 
-/* ===================== 3D ===================== */
-var S = null;            // модуль scene3d
-var heroStage = null, calcStage = null;
-var heroPool = null;
+/* ===================== ЧЕРТЁЖ-ЭСКИЗ (SVG) =====================
+   Лёгкие схемы в стиле инженерной «кальки»: сетка, размерные линии,
+   рамка и штамп. Перестраиваются вместе с параметрами калькулятора. */
+var bpBox = $('#bp'), bpLbl = $('#bp-lbl');
 
-function loadScene3D(){
-  if(S) return Promise.resolve(S);
-  return import('./scene3d.js').then(function(mod){ S = mod; return mod; });
+function bcomm(x){ // число с запятой
+  return String(Math.round(x * 10) / 10).replace('.', ',');
+}
+function bpT(x, y, str, cls, anchor){ // текст
+  return '<text x="' + x + '" y="' + y + '" class="' + (cls||'t-d') + '"' +
+    (anchor ? ' text-anchor="' + anchor + '"' : '') + '>' + str + '</text>';
+}
+function bpTick(x, y){ // засечка размерной линии (классика — под 45°)
+  return '<line class="s-dim" x1="' + (x-4) + '" y1="' + (y+4) + '" x2="' + (x+4) + '" y2="' + (y-4) + '"/>';
+}
+function bpDimH(x1, x2, y, txt){ // горизонтальный размер
+  return '<line class="s-dim" x1="' + x1 + '" y1="' + y + '" x2="' + x2 + '" y2="' + y + '"/>' +
+    bpTick(x1, y) + bpTick(x2, y) +
+    bpT((x1+x2)/2, y-7, txt, 't-d', 'middle');
+}
+function bpDimV(x, y1, y2, txt){ // вертикальный размер (подпись повёрнута)
+  var mx = x, my = (y1+y2)/2;
+  return '<line class="s-dim" x1="' + x + '" y1="' + y1 + '" x2="' + x + '" y2="' + y2 + '"/>' +
+    bpTick(x, y1) + bpTick(x, y2) +
+    '<text x="' + mx + '" y="' + my + '" class="t-d" text-anchor="middle" transform="rotate(-90 ' + mx + ' ' + (my+4) + ')">' + txt + '</text>';
+}
+function bpChip(x, y, txt){ // янтарная «плашка-заметка»
+  var w = txt.length * 7 + 22;
+  return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="23" rx="11.5" ' +
+    'fill="rgba(245,168,60,.12)" stroke="rgba(245,168,60,.55)" stroke-width="1"/>' +
+    bpT(x + w/2, y + 15.5, txt, 't-chip', 'middle');
+}
+function bpFrame(sheet, title, inner){ // рамка + штамп + сетка
+  return '<svg class="bpd" viewBox="0 0 760 430" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+  '<defs>' +
+    '<pattern id="bpGrid" width="38" height="38" patternUnits="userSpaceOnUse">' +
+      '<path d="M38 .5 H.5 V38" fill="none" stroke="rgba(124,201,255,.065)" stroke-width="1"/></pattern>' +
+    '<pattern id="bpWtr" width="13" height="13" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
+      '<line x1="0" y1="0" x2="0" y2="13" stroke="rgba(124,201,255,.4)" stroke-width="1.1"/></pattern>' +
+  '</defs>' +
+  '<rect x="0" y="0" width="760" height="430" fill="url(#bpGrid)"/>' +
+  '<rect class="s-thin" x="12" y="12" width="736" height="406"/>' +
+  '<path class="s-main" d="M12 40 V12 H40 M720 12 H748 V40 M748 390 V418 H720 M40 418 H12 V390" fill="none"/>' +
+  // штамп
+  '<rect class="s-thin" x="492" y="352" width="256" height="66"/>' +
+  '<line class="s-thin" x1="492" y1="374" x2="748" y2="374"/>' +
+  '<line class="s-thin" x1="492" y1="396" x2="748" y2="396"/>' +
+  bpT(506, 369, 'ВОЛГАСТРОЙ 76', 't-t') +
+  bpT(742, 369, 'лист ' + sheet, 't-u', 'end') +
+  bpT(506, 391, title, 't-n') +
+  bpT(506, 412, 'предварительный эскиз · не является проектом', 't-n') +
+  inner + '</svg>';
 }
 
-/* --- герой --- */
-function initHero(){
-  var host = $('#hero3d'); if(!host) return;
-  loadScene3D().then(function(S){
-    if(!S.can3D()) return;
-    var cv = document.createElement('canvas');
-    host.insertBefore(cv, host.firstChild);
-    heroStage = new S.Stage3D(cv, { camDist:13.6, fov:40, theta:-0.72, phi:1.06, targetY:.55, autoSpeed:.12 });
-
-    // Вся композиция в одной группе — так её легко уместить в кадр целиком
-    var scene = S.group();
-    scene.add(S.groundPad(13.5));
-
-    var house = S.houseModel({ w:4.4, d:3.3, h:2.2, metal:false, roof:true, walls:.72 });
-    house.position.set(-2.5, 0, -1.0);
-    scene.add(house);
-
-    heroPool = S.poolModel({ w:3.4, d:2.4, deck:true });
-    heroPool.position.set(2.5, 0, .7);
-    scene.add(heroPool);
-
-    var nets = S.netsModel({ len:5.2, type:'k1', deep:false, well:true });
-    nets.position.set(-1.6, -.02, 3.6); nets.rotation.y = .26; nets.scale.setScalar(.82);
-    scene.add(nets);
-
-    var piles = S.pilesModel({ n:6, dia:.07, rost:true });
-    piles.position.set(3.5, 0, -2.9); piles.scale.setScalar(.72);
-    scene.add(piles);
-
-    scene.scale.setScalar(.92);
-    heroStage.root.add(scene);
-    heroStage.fit(scene, 0.84);
-    heroStage.onResizeFit = function(){ heroStage.fit(scene, 0.84); };
-
-    var wBase = heroPool.userData.waterBase, wGeo = heroPool.userData.water.geometry;
-    heroStage.onFrame = function(dt, t){
-      if(!wBase) return;
-      var p = wGeo.attributes.position, arr = p.array;
-      for(var i=0;i<arr.length;i+=3){
-        arr[i+2] = wBase[i+2] + Math.sin(t*1.7 + wBase[i]*2.2) * .022
-                             + Math.cos(t*1.2 + wBase[i+1]*2.6) * .016;
-      }
-      p.needsUpdate = true;
-    };
-    host.classList.add('ready');
-    heroStage.start();
-    watchVisibility(host, heroStage);
-  }).catch(function(){ /* нет 3D — остаётся фото */ });
-}
-
-/* --- 3D в калькуляторе --- */
-function initCalc3D(){
-  var host = $('#calc3d'); if(!host) return;
-  loadScene3D().then(function(S){
-    if(!S.can3D()){ host.style.display='none'; return; }
-    var cv = document.createElement('canvas');
-    host.insertBefore(cv, host.firstChild);
-    calcStage = new S.Stage3D(cv, { camDist:11.5, fov:42, theta:-0.62, phi:1.06, targetY:.7, autoSpeed:.2 });
-    calcStage.root.add(S.groundPad(13));
-    sync3D(true);
-    calcStage.start();
-    watchVisibility(host, calcStage);
-  }).catch(function(){ host.style.display='none'; });
-}
-
-var modelNode = null;
-function sync3D(rebuild){
-  if(!calcStage || !S) return;
-  if(!rebuild) return;
-  if(modelNode){
-    calcStage.root.remove(modelNode);
-    modelNode.traverse && modelNode.traverse(function(o){
-      o.geometry && o.geometry.dispose && o.geometry.dispose();
-      if(o.material){ Array.isArray(o.material) ? o.material.forEach(function(m){m.dispose()}) : o.material.dispose(); }
-    });
-    modelNode = null;
+function bpHouse(){
+  var a = rv('r-house-area');
+  var metal = gHouseMat.mult() > 1;
+  var turnkey = gHouseKit.val() >= 24000;
+  var wm = Math.sqrt(a * 1.3), dm = a / wm;
+  var k = Math.min(360 / wm, 220 / dm);
+  var pw = wm * k, ph = dm * k;
+  var x0 = 340 - pw/2, y0 = 84 + (226 - ph)/2;
+  var s = '';
+  s += bpT(28, 44, 'ПЛАН · ' + a + ' м²', 't-t');
+  s += bpT(28, 63, 'каркас: ' + (metal ? 'металл + сэндвич' : 'дерево 50×150'), 't-n');
+  s += bpT(28, 79, 'комплектация: ' + (turnkey ? 'под ключ' : 'коробка'), 't-n');
+  // свесы кровли
+  s += '<rect class="s-dash" x="' + (x0-13) + '" y="' + (y0-13) + '" width="' + (pw+26) + '" height="' + (ph+26) + '"/>';
+  // наружный контур (анимированная основная линия)
+  s += '<path class="s-main draw" pathLength="100" d="M' + x0 + ' ' + y0 + ' h' + pw + ' v' + ph + ' h' + (-pw) + ' Z"/>';
+  // внутренняя грань стены
+  s += '<path class="s-thin" d="M' + (x0+9) + ' ' + (y0+9) + ' h' + (pw-18) + ' v' + (ph-18) + ' h' + (18-pw) + ' Z"/>';
+  // коньковая линия
+  s += '<line class="s-dash" x1="' + x0 + '" y1="' + (y0+ph/2) + '" x2="' + (x0+pw) + '" y2="' + (y0+ph/2) + '"/>';
+  if(metal){ // швы панелей по длинным фасадам
+    for(var i = 1; i < 6; i++){
+      var sx = x0 + pw * i / 6;
+      s += '<line class="s-thin" x1="' + sx + '" y1="' + y0 + '" x2="' + sx + '" y2="' + (y0+9) + '"/>';
+      s += '<line class="s-thin" x1="' + sx + '" y1="' + (y0+ph-9) + '" x2="' + sx + '" y2="' + (y0+ph) + '"/>';
+    }
   }
-  var lbl = $('#calc3d .lbl');
-  var m = null, label = '';
-
-  if(tab === 'house'){
-    var a = rv('r-house-area'), side = Math.sqrt(Math.max(a,16));
-    var w = Math.min(7.2, side*1.16), d = Math.min(5.4, side*.86);
-    // «Коробка» — это уже стены + кровля, поэтому она тоже сплошная.
-    // Разница с «под ключ» в окнах/дверях, а не в прозрачности.
-    m = S.houseModel({ w:w, d:d, h:2.45, metal:gHouseMat.mult()>1,
-      roof:true, walls: gHouseKit.val()>=24000 ? .8 : .62 });
-    label = (gHouseMat.mult()>1 ? 'Металл + сэндвич' : 'Деревянный каркас') + ' · ' + a + ' м²';
-
-  } else if(tab === 'pool'){
-    m = S.poolModel({ w:4.6, d:3.1, deck:isOn('c-pool-deck'), pavilion:gPoolPav.val()>0 });
-    label = 'Бассейн' + (gPoolPav.val()>0 ? ' + павильон' : '');
-
-  } else if(tab === 'deck'){
-    var ad = rv('r-deck-area'), s2 = Math.sqrt(Math.max(ad,12));
-    m = S.deckModel({ w:Math.min(7.4,s2*1.2), d:Math.min(5.2,s2*.85),
-      diag:gDeckLay.val()>1000, rail:true });
-    label = 'Терраса ДПК · ' + ad + ' м²' + (gDeckLay.val()>1000?' · диагональ':'');
-
-  } else if(tab === 'net'){
-    var key = NET_KEYS[gNetType.val()] || 'k1';
-    m = S.netsModel({ len:8.6, type:key, deep:gNetDeep.mult()>1, well:isOn('c-net-well') });
-    label = (NET_NAMES[gNetType.val()]||'Сеть') + ' · ' + rv('r-net-len') + ' м';
-
-  } else if(tab === 'pile'){
-    m = S.pilesModel({ n:Math.min(rv('r-pile-n'),40), dia:gPileDia.val()/12000, rost:rv('r-pile-rost')>0 });
-    label = rv('r-pile-n') + ' свай ' + (DIA_NAMES[gPileDia.val()]||'');
-
-  } else if(tab === 'finish'){
-    var lv = gFinLvl.val()>=12000 ? 3 : (gFinLvl.val()>=7500 ? 2 : 1);
-    m = S.finishModel({ lvl:lv, warm:isOn('c-fin-floor') });
-    label = (FIN_NAMES[gFinLvl.val()]||'Отделка') + ' · ' + rv('r-fin-area') + ' м²';
+  if(turnkey){ // перегородки + дуга двери
+    var px = x0 + pw * .62, py = y0 + ph * .55;
+    s += '<line class="s-dash" x1="' + px + '" y1="' + (y0+9) + '" x2="' + px + '" y2="' + (y0+ph-9) + '"/>';
+    s += '<line class="s-dash" x1="' + px + '" y1="' + py + '" x2="' + (x0+pw-9) + '" y2="' + py + '"/>';
+    s += '<path class="s-thin" d="M' + (px+34) + ' ' + py + ' A34 34 0 0 1 ' + px + ' ' + (py-34) +
+         ' M' + px + ' ' + (py-34) + ' L' + px + ' ' + py + ' L' + (px+34) + ' ' + py + '"/>';
   }
-  if(m){
-    modelNode = m;
-    calcStage.root.add(m);
-    calcStage.fit(m, 0.92);
-    // при повороте телефона кадр пересобирается под новую пропорцию
-    calcStage.onResizeFit = function(){ if(modelNode) calcStage.fit(modelNode, 0.92); };
-    // Траншею и отделку нужно смотреть сверху — иначе стенки закрывают содержимое.
-    calcStage.phi = (tab === 'net' || tab === 'finish') ? 0.80 : 1.09;
+  if(isOn('c-house-fund')){ // сваи по периметру
+    var pts = [[x0,y0],[x0+pw/2,y0],[x0+pw,y0],[x0,y0+ph/2],[x0+pw,y0+ph/2],[x0,y0+ph],[x0+pw/2,y0+ph],[x0+pw,y0+ph]];
+    pts.forEach(function(p){ s += '<circle class="f-dot" cx="' + p[0] + '" cy="' + p[1] + '" r="5"/>'; });
+    s += bpChip(x0, y0 - 36, 'СВАЙНЫЙ ФУНДАМЕНТ');
   }
-  if(lbl) lbl.textContent = label;
+  s += bpDimH(x0, x0+pw, y0 + ph + 30, 'A ' + bcomm(wm) + ' м');
+  s += bpDimV(x0 + pw + 26, y0, y0 + ph, 'B ' + bcomm(dm) + ' м');
+  return s;
 }
 
-/* пауза рендера, когда блок вне экрана или вкладка скрыта */
-function watchVisibility(host, stage){
-  var vio = new IntersectionObserver(function(es){
-    es.forEach(function(e){ e.isIntersecting ? stage.start() : stage.stop(); });
-  }, { threshold:.03 });
-  vio.observe(host);
-  document.addEventListener('visibilitychange', function(){
-    document.hidden ? stage.stop() : (isInView(host) && stage.start());
+function bpPool(){
+  var pav = gPoolPav.val();
+  var s = '';
+  s += bpT(28, 44, 'БАССЕЙН · чаша 8,0 × 4,0 м', 't-t');
+  s += bpT(28, 63, 'глубина 1,5 м · скиммер · форсунки', 't-n');
+  var bx = 190, by = 150, bw = 300, bh = 168;
+  if(isOn('c-pool-deck')){ // терраса вокруг чаши
+    var dx = bx-46, dy = by-46, dw = bw+92, dh = bh+92;
+    s += '<rect class="s-fill" x="' + dx + '" y="' + dy + '" width="' + dw + '" height="' + dh + '"/>';
+    for(var ly = dy + 11; ly < dy + dh - 5; ly += 12){
+      s += '<line class="s-thin" x1="' + dx + '" y1="' + ly + '" x2="' + (dx+dw) + '" y2="' + ly + '"/>';
+    }
+    s += '<rect class="s-dash" x="' + dx + '" y="' + dy + '" width="' + dw + '" height="' + dh + '"/>';
+    s += bpT(dx + 4, dy + dh - 8, 'ТЕРРАСА ~50 м²', 't-u');
+  }
+  if(pav > 0){ // павильон
+    s += '<rect class="s-accd" x="' + (bx-26) + '" y="' + (by-24) + '" width="' + (bw+52) + '" height="' + (bh+48) + '" rx="26"/>';
+    for(var i = 1; i < 5; i++){
+      var rx = bx - 26 + (bw + 52) * i / 5;
+      s += '<line class="s-dash" x1="' + rx + '" y1="' + (by-24) + '" x2="' + rx + '" y2="' + (by+bh+24) + '"/>';
+    }
+    s += bpChip(bx - 26, by - 56, 'ПАВИЛЬОН · ' + (pav > 40000 ? 'БОЛЬШОЙ' : 'МАЛЫЙ'));
+  }
+  // обрамление борта
+  s += '<rect class="s-thin" x="' + (bx-10) + '" y="' + (by-10) + '" width="' + (bw+20) + '" height="' + (bh+20) + '"/>';
+  // вода
+  s += '<rect class="s-wfill" x="' + bx + '" y="' + by + '" width="' + bw + '" height="' + bh + '" rx="8"/>';
+  s += '<rect x="' + bx + '" y="' + by + '" width="' + bw + '" height="' + bh + '" rx="8" fill="url(#bpWtr)" opacity=".5"/>';
+  s += '<rect class="s-main draw" pathLength="100" x="' + bx + '" y="' + by + '" width="' + bw + '" height="' + bh + '" rx="8"/>';
+  // ступени — четверть-окружности в углу
+  [20, 31, 42].forEach(function(r){
+    s += '<path class="s-thin" d="M' + (bx+16+r) + ' ' + (by+16) + ' A' + r + ' ' + r + ' 0 0 1 ' + (bx+16) + ' ' + (by+16+r) + '"/>';
   });
+  // лестница и скиммер
+  s += '<circle class="s-thin" cx="' + (bx+bw-30) + '" cy="' + (by+12) + '" r="4"/>';
+  s += '<circle class="s-thin" cx="' + (bx+bw-44) + '" cy="' + (by+12) + '" r="4"/>';
+  s += '<rect class="s-acc" x="' + (bx+bw/2-14) + '" y="' + (by-3) + '" width="28" height="6"/>';
+  s += bpDimH(bx, bx+bw, by + bh + 34, '8,0 м');
+  s += bpDimV(bx - 34, by, by + bh, '4,0 м');
+  // техузел справа
+  if(isOn('c-pool-pipe') || isOn('c-pool-tech')){
+    var tx = 600, ty = 190;
+    if(isOn('c-pool-pipe')){
+      s += '<rect class="s-thin" x="' + tx + '" y="' + ty + '" width="34" height="34"/>';
+      s += '<circle class="s-thin" cx="' + (tx+17) + '" cy="' + (ty+52) + '" r="13"/>';
+      s += '<path class="s-dash" d="M' + tx + ' ' + (ty+17) + ' H' + (bx+bw) +
+           ' M' + tx + ' ' + (ty+52) + ' H' + (bx+bw+6) + ' V' + (by+bh) + '"/>';
+      s += bpT(tx-6, ty-12, 'НАСОС / ФИЛЬТР', 't-u');
+      s += bpT(tx-6, ty+82, 'обвязка ПВХ до d75', 't-n');
+    }
+    if(isOn('c-pool-tech')){
+      s += '<rect class="s-dash" x="' + (tx-8) + '" y="' + (ty+96) + '" width="72" height="46"/>';
+      s += '<circle class="s-thin" cx="' + (tx+8) + '" cy="' + (ty+119) + '" r="12"/>';
+      s += '<circle class="s-thin" cx="' + (tx+39) + '" cy="' + (ty+119) + '" r="12"/>';
+      s += bpT(tx-8, ty+160, 'ТЕХУЗЕЛ · 3 × 1 м³', 't-u');
+    }
+  }
+  return s;
 }
-function isInView(el){
-  var r = el.getBoundingClientRect();
-  return r.bottom > 0 && r.top < window.innerHeight;
+
+function bpNet(){
+  var len = rv('r-net-len'), rate = gNetType.val(), deep = gNetDeep.mult() > 1;
+  var nm = NET_NAMES[rate] || 'Сеть';
+  var DZ = deep ? 168 : 108;
+  var gy = 138, x1 = 84, x2 = 664;
+  var color = { 2800:'#f5a83c', 2300:'#8fd0ff', 3500:'#ffcf8a', 2000:'#9fd0b1' }[rate] || '#8fd0ff';
+  var s = '';
+  s += bpT(28, 44, nm.toUpperCase() + ' · ' + len + ' м', 't-t');
+  s += bpT(28, 63, deep ? 'глубокое заложение · до 1,8 м' : 'стандарт · до 1,2 м', 't-n');
+  // поверхность
+  s += '<line class="s-main draw" pathLength="100" x1="56" y1="' + gy + '" x2="704" y2="' + gy + '"/>';
+  for(var gx = 64; gx <= 700; gx += 22){
+    s += '<line class="s-thin" x1="' + gx + '" y1="' + gy + '" x2="' + gx + '" y2="' + (gy-9) + '"/>';
+  }
+  // трасшей
+  s += '<path class="s-dash" d="M70 ' + gy + ' L94 ' + (gy+DZ+22) + ' H666 L700 ' + gy + '"/>';
+  // труба
+  s += '<rect x="' + x1 + '" y="' + (gy+DZ) + '" width="' + (x2-x1) + '" height="15" rx="7.5" ' +
+       'fill="none" stroke="' + color + '" stroke-width="2.4"/>';
+  // стакан колодца
+  if(isOn('c-net-well')){
+    s += '<rect class="s-thin" x="' + (x2+4) + '" y="' + (gy-26) + '" width="26" height="' + (DZ+41) + '"/>';
+    s += '<line class="s-main" x1="' + (x2-2) + '" y1="' + (gy-26) + '" x2="' + (x2+36) + '" y2="' + (gy-26) + '"/>';
+    s += bpT(x2+2, gy - 40, 'КОЛОДЕЦ', 't-u');
+  }
+  // ввод
+  s += '<circle class="f-dot" cx="' + x1 + '" cy="' + (gy+DZ+7.5) + '" r="6"/>';
+  s += bpT(x1 - 16, gy + DZ + 40, 'ВВОД В ДОМ', 't-u');
+  // гильза под дорогой
+  if(isOn('c-net-road')){
+    s += '<rect class="s-accd" x="230" y="' + (gy+DZ-13) + '" width="96" height="41" rx="6"/>';
+    s += bpT(230, gy + DZ + 46, 'ГИЛЬЗА ПОД ДОРОГОЙ', 't-chip');
+  }
+  // уклон
+  s += '<path class="s-thin" d="M' + (x2-190) + ' ' + (gy+DZ-16) + ' h44 l-8 -5 m8 5 -8 5"/>';
+  s += bpT(x2 - 250, gy + DZ - 22, 'уклон 2 см/м', 't-n');
+  // размеры
+  s += bpDimH(x1, x2, gy - 26, 'L = ' + len + ' м');
+  s += bpDimV(56, gy, gy + DZ, 'H ' + (deep ? '1,8' : '1,2') + ' м');
+  if(isOn('c-net-back')){
+    s += bpChip(56, gy + DZ + 66, 'ВОССТАНОВЛЕНИЕ БЛАГОУСТРОЙСТВА ПО ТРАССЕ');
+  }
+  return s;
+}
+
+function bpDeck(){
+  var ad = rv('r-deck-area'), diag = gDeckLay.val() > 1000;
+  var wm = Math.sqrt(ad * 1.5), dm = ad / wm;
+  var k = Math.min(380 / wm, 230 / dm);
+  var pw = wm * k, ph = dm * k;
+  var x0 = 360 - pw/2, y0 = 78 + (236 - ph)/2;
+  var s = '';
+  s += bpT(28, 44, 'ТЕРРАСА · ' + ad + ' м²', 't-t');
+  s += bpT(28, 63, (diag ? 'диагональная укладка' : 'прямая укладка') + ' · зазор 4–5 мм', 't-n');
+  s += '<defs><clipPath id="bpClipD"><rect x="' + x0 + '" y="' + y0 + '" width="' + pw + '" height="' + ph + '"/></clipPath></defs>';
+  if(isOn('c-deck-frame')){ // металлокаркас — двойной контур
+    s += '<rect class="s-thin" x="' + (x0-9) + '" y="' + (y0-9) + '" width="' + (pw+18) + '" height="' + (ph+18) + '"/>';
+    [[x0-9,y0-9],[x0+pw,y0-9],[x0-9,y0+ph],[x0+pw,y0+ph]].forEach(function(p){
+      s += '<rect class="s-acc" x="' + p[0] + '" y="' + p[1] + '" width="9" height="9"/>';
+    });
+  }
+  // доски
+  s += '<g clip-path="url(#bpClipD)">';
+  if(diag){
+    for(var d = -ph; d < pw + ph; d += 14){
+      s += '<line class="s-thin" x1="' + (x0+d) + '" y1="' + y0 + '" x2="' + (x0+d+ph) + '" y2="' + (y0+ph) + '"/>';
+    }
+  } else {
+    for(var ly = y0 + 12; ly < y0 + ph; ly += 24){
+      s += '<line class="s-thin" x1="' + x0 + '" y1="' + ly + '" x2="' + (x0+pw) + '" y2="' + ly + '"/>';
+    }
+  }
+  s += '</g>';
+  s += '<path class="s-main draw" pathLength="100" d="M' + x0 + ' ' + y0 + ' h' + pw + ' v' + ph + ' h' + (-pw) + ' Z"/>';
+  // ступени слева
+  var stY = y0 + ph * .62;
+  for(var st = 0; st < 3; st++){
+    s += '<line class="s-thin" x1="' + (x0-24+st*8) + '" y1="' + (stY+st*10) + '" x2="' + x0 + '" y2="' + (stY+st*10) + '"/>';
+  }
+  s += bpT(x0 - 74, stY - 8, 'СТУПЕНИ', 't-u');
+  // сваи вдоль кромки
+  if(isOn('c-deck-pile')){
+    var np = Math.max(3, Math.round(pw / 78));
+    for(var i = 0; i <= np; i++){
+      var px = x0 + pw * i / np;
+      s += '<circle class="f-dot" cx="' + px + '" cy="' + (y0+ph+ (isOn('c-deck-frame')?9:0)) + '" r="5" transform="translate(0 1)"/>' +
+           '<line class="s-thin" x1="' + px + '" y1="' + (y0+ph+6) + '" x2="' + px + '" y2="' + (y0+ph+18) + '"/>';
+    }
+    s += bpChip(x0, y0 - 34, 'СВАЙНОЕ ОСНОВАНИЕ');
+  }
+  s += bpDimH(x0, x0+pw, y0 + ph + (isOn('c-deck-pile') ? 48 : 30), 'A ' + bcomm(wm) + ' м');
+  s += bpDimV(x0 + pw + 28, y0, y0 + ph, 'B ' + bcomm(dm) + ' м');
+  if(isOn('c-deck-mat')) s += bpT(28, 400, '+ материалы (доска, лаги, крепёж) — в смете', 't-n');
+  return s;
+}
+
+function bpPile(){
+  var n = rv('r-pile-n'), dn = DIA_NAMES[gPileDia.val()] || '', rm = rv('r-pile-rost');
+  var cols = Math.ceil(Math.sqrt(n * 1.6)), rowsN = Math.ceil(n / cols);
+  var cell = Math.min(320 / Math.max(cols-1,1), 178 / Math.max(rowsN-1,1));
+  var gw = (cols-1) * cell, gh = (rowsN-1) * cell;
+  var x0 = 372 - gw/2, y0 = 200 - gh/2;
+  var s = '';
+  s += bpT(28, 44, 'СВАЙНОЕ ПОЛЕ · ' + n + ' шт', 't-t');
+  s += bpT(28, 63, dn + ' · длина 2–3 м · оголовки', 't-n');
+  if(rm > 0){
+    s += '<rect class="s-accd" x="' + (x0-24) + '" y="' + (y0-24) + '" width="' + (gw+48) + '" height="' + (gh+48) + '"/>';
+    s += bpT(x0 - 24, y0 + gh + 44, 'РОСТВЕРК ШВЕЛЛЕРОМ · ' + rm + ' м.п.', 't-u');
+  } else {
+    s += '<rect class="s-dash" x="' + (x0-24) + '" y="' + (y0-24) + '" width="' + (gw+48) + '" height="' + (gh+48) + '"/>';
+  }
+  var drawn = 0;
+  for(var r = 0; r < rowsN; r++){
+    for(var c = 0; c < cols && drawn < n; c++, drawn++){
+      var px = x0 + c * cell, py = y0 + r * cell;
+      s += '<circle class="f-dot" cx="' + px + '" cy="' + py + '" r="' + Math.min(8, cell * .3) + '"/>';
+      s += '<circle class="f-acc" cx="' + px + '" cy="' + py + '" r="1.7"/>';
+    }
+  }
+  // легенда
+  s += '<circle class="f-dot" cx="36" cy="392" r="6"/>' + bpT(50, 396, 'свая винтовая', 't-n');
+  s += '<rect class="s-accd" x="160" y="384" width="24" height="15"/>' + bpT(192, 396, rm > 0 ? 'ростверк в расчёте' : 'ростверк не нужен', 't-n');
+  return s;
+}
+
+function bpFinish(){
+  var af = rv('r-fin-area'), frate = gFinLvl.val();
+  var fn = FIN_NAMES[frate] || 'Отделка';
+  var side = Math.sqrt(af);
+  var p = Math.min(320, Math.max(150, side * 21));
+  var x0 = 330 - p/2, y0 = 210 - p/2;
+  var s = '';
+  s += bpT(28, 44, 'ПЛАН ПОМЕЩЕНИЯ · ' + af + ' м²', 't-t');
+  s += bpT(28, 63, 'уровень: ' + fn.toLowerCase(), 't-n');
+  // штриховка пола
+  s += '<defs><clipPath id="bpClipF"><rect x="' + (x0+8) + '" y="' + (y0+8) + '" width="' + (p-16) + '" height="' + (p-16) + '"/></clipPath></defs>';
+  s += '<g clip-path="url(#bpClipF)" opacity=".5">';
+  for(var d = -p; d < p * 2; d += 16){
+    s += '<line class="s-thin" x1="' + (x0+d) + '" y1="' + y0 + '" x2="' + (x0+d+p) + '" y2="' + (y0+p) + '"/>';
+  }
+  s += '</g>';
+  // стены (с проёмом двери внизу)
+  var doorX = x0 + p * .58, doorW = 46;
+  s += '<path class="s-main draw" pathLength="100" d="M' + x0 + ' ' + (y0+p) + ' V' + y0 + ' H' + (x0+p) + ' V' + (y0+p) + ' H' + (doorX+doorW) +
+       ' M' + doorX + ' ' + (y0+p) + ' H' + x0 + '"/>';
+  s += '<path class="s-thin" d="M' + (x0+8) + ' ' + (y0+8) + ' h' + (p-16) + ' v' + (p-16) + '"/>';
+  // окно на верхней стене
+  s += '<rect class="s-acc" x="' + (x0 + p * .38) + '" y="' + (y0-3) + '" width="64" height="6"/>';
+  // дуга двери
+  s += '<path class="s-thin" d="M' + (doorX+doorW) + ' ' + (y0+p-doorW) + ' A' + doorW + ' ' + doorW + ' 0 0 0 ' + doorX + ' ' + (y0+p) + '"/>';
+  // тёплый пол — змеевик
+  if(isOn('c-fin-floor')){
+    var wz = 'M' + (x0+18) + ' ' + (y0+p-22), dir = 1, yy = y0 + p - 22, step = 17;
+    for(var r = 0; r < 4; r++){
+      wz += ' h' + (dir * (p - 36)); dir = -dir; yy -= step; wz += ' v' + (-step + 0);
+    }
+    wz += ' h' + (dir * (p - 60));
+    s += '<path class="s-acc" opacity=".85" d="' + wz + '" fill="none"/>';
+    s += bpChip(28, 90, 'ТЁПЛЫЙ ПОЛ');
+  }
+  if(isOn('c-fin-elec')){
+    s += '<rect class="s-acc" x="' + (x0+p-16) + '" y="' + (y0+16) + '" width="10" height="16"/>';
+    var ptsE = [[x0+p*.24,y0+p*.26],[x0+p*.5,y0+p*.4],[x0+p*.72,y0+p*.3]];
+    ptsE.forEach(function(pt){
+      s += '<path class="s-dash" d="M' + (x0+p-11) + ' ' + (y0+24) + ' L' + pt[0] + ' ' + pt[1] + '"/>';
+      s += '<circle class="f-dot" cx="' + pt[0] + '" cy="' + pt[1] + '" r="3.6"/>';
+    });
+    s += bpChip(28, 120, 'ЭЛЕКТРИКА ПОД КЛЮЧ');
+  }
+  if(isOn('c-fin-sant')){
+    s += '<circle class="s-acc" cx="' + (x0+20) + '" cy="' + (y0+24) + '" r="6"/>' +
+         '<circle class="s-acc" cx="' + (x0+38) + '" cy="' + (y0+24) + '" r="6"/>' +
+         bpChip(28, 150, 'САНТЕХНИКА · 2 ТОЧКИ');
+  }
+  s += bpDimH(x0, x0+p, y0 + p + 32, bcomm(side) + ' м');
+  s += bpDimV(x0 + p + 28, y0, y0 + p, bcomm(side) + ' м');
+  return s;
+}
+
+var BP_SHEETS = { house:['A','план каркасного дома'], pool:['Б','бассейн · план'],
+  net:['В','наружные сети · продольный профиль'], deck:['Г','терраса ДПК · план'],
+  pile:['Д','свайное поле · план'], finish:['Е','отделка · план помещения'] };
+
+function drawBP(){
+  if(!bpBox) return;
+  var inner = '', label = '';
+  if(tab === 'house'){
+    inner = bpHouse();
+    var a = rv('r-house-area');
+    label = (gHouseMat.mult() > 1 ? 'Металл + сэндвич' : 'Деревянный каркас') + ' · ' + a + ' м²';
+  } else if(tab === 'pool'){
+    inner = bpPool();
+    label = 'Бассейн' + (gPoolPav.val() > 0 ? ' + павильон' : '');
+  } else if(tab === 'net'){
+    inner = bpNet();
+    label = (NET_NAMES[gNetType.val()] || 'Сеть') + ' · ' + rv('r-net-len') + ' м';
+  } else if(tab === 'deck'){
+    inner = bpDeck();
+    label = 'Терраса ДПК · ' + rv('r-deck-area') + ' м²' + (gDeckLay.val() > 1000 ? ' · диагональ' : '');
+  } else if(tab === 'pile'){
+    inner = bpPile();
+    label = rv('r-pile-n') + ' свай ' + (DIA_NAMES[gPileDia.val()] || '');
+  } else if(tab === 'finish'){
+    inner = bpFinish();
+    label = (FIN_NAMES[gFinLvl.val()] || 'Отделка') + ' · ' + rv('r-fin-area') + ' м²';
+  }
+  var sh = BP_SHEETS[tab] || ['A','эскиз'];
+  bpBox.innerHTML = bpFrame(sh[0], sh[1].toUpperCase(), inner);
+  if(bpLbl) bpLbl.textContent = label;
+  // перезапуск анимации «вычерчивания»
+  bpBox.classList.remove('redrw');
+  void bpBox.offsetWidth;
+  if(!reduceMotion) bpBox.classList.add('redrw');
 }
 
 /* ===================== ТЕЛЕФОННАЯ МАСКА ===================== */
@@ -825,7 +1076,7 @@ $('#lead-form').addEventListener('submit', function(e){
 
   var btn = form.querySelector('button[type=submit]');
   var old = btn.innerHTML;
-  btn.disabled = true; btn.innerHTML = '⏳ Отправляем…';
+  btn.disabled = true; btn.textContent = 'Отправляем…';
 
   post('/api/submit.php', {
     name:nm, phone:ph, subject:tp, message:ms,
@@ -834,19 +1085,19 @@ $('#lead-form').addEventListener('submit', function(e){
   }).then(function(r){
     if(r.ok){
       okBox.classList.add('on');
-      btn.innerHTML = '✅ Отправлено!';
+      btn.textContent = 'Отправлено';
       form.reset(); setChip(false);
       $$('.form-card input').forEach(function(i){ i.classList.remove('bad'); });
       setTimeout(function(){ btn.disabled=false; btn.innerHTML=old; }, 5000);
     } else if(r.status === 429){
-      errBox.innerHTML = '⚠️ Слишком много заявок с вашего адреса. ' + PHONES;
+      errBox.innerHTML = 'Слишком много заявок с вашего адреса. ' + PHONES;
       errBox.classList.add('on'); btn.disabled=false; btn.innerHTML=old;
     } else {
-      errBox.innerHTML = '⚠️ Не получилось отправить. ' + PHONES;
+      errBox.innerHTML = 'Не получилось отправить. ' + PHONES;
       errBox.classList.add('on'); btn.disabled=false; btn.innerHTML=old;
     }
   }).catch(function(){
-    errBox.innerHTML = '⚠️ Нет связи. ' + PHONES;
+    errBox.innerHTML = 'Нет связи с сервером. ' + PHONES;
     errBox.classList.add('on'); btn.disabled=false; btn.innerHTML=old;
   });
 });
@@ -928,7 +1179,7 @@ $('#rev-form').addEventListener('submit', function(e){
   }
   var btn = form.querySelector('button[type=submit]');
   var old = btn.innerHTML;
-  btn.disabled = true; btn.innerHTML = '⏳ Отправляем…';
+  btn.disabled = true; btn.textContent = 'Отправляем…';
 
   post('/api/add-review.php', { name:nm, place:pl, service:sv, rating:rt, text:tx, hp:$('#r-hp').value })
   .then(function(r){
@@ -937,13 +1188,13 @@ $('#rev-form').addEventListener('submit', function(e){
       $$('.rev-form input,.rev-form textarea').forEach(function(i){ i.classList.remove('bad'); });
       $('#rs5').checked = true;
     } else if(r.status === 429){
-      errBox.innerHTML = '⚠️ Вы недавно уже оставляли отзыв. ' + PHONES; errBox.classList.add('on');
+      errBox.innerHTML = 'Вы недавно уже оставляли отзыв. ' + PHONES; errBox.classList.add('on');
     } else {
-      errBox.innerHTML = '⚠️ Не получилось отправить. ' + PHONES; errBox.classList.add('on');
+      errBox.innerHTML = 'Не получилось отправить. ' + PHONES; errBox.classList.add('on');
     }
     btn.disabled = false; btn.innerHTML = old;
   }).catch(function(){
-    errBox.innerHTML = '⚠️ Нет связи. ' + PHONES; errBox.classList.add('on');
+    errBox.innerHTML = 'Нет связи с сервером. ' + PHONES; errBox.classList.add('on');
     btn.disabled = false; btn.innerHTML = old;
   });
 });
@@ -956,13 +1207,7 @@ $('#r-text').addEventListener('input', function(){
 /* ===================== СТАРТ ===================== */
 calc();
 activateTab('house');
-
-// 3D грузим после первой отрисовки, чтобы не мешать LCP
-if('requestIdleCallback' in window){
-  requestIdleCallback(function(){ initHero(); initCalc3D(); }, {timeout:2200});
-} else {
-  setTimeout(function(){ initHero(); initCalc3D(); }, 900);
-}
+drawBP();
 
 // год в подвале
 var y = $('#year'); if(y) y.textContent = new Date().getFullYear();
