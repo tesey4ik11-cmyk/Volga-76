@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /admin.php
+Disallow: /install.php
+Disallow: /api/
+Disallow: /data/
+
+Sitemap: https://volgastroy76.ru/sitemap.xml

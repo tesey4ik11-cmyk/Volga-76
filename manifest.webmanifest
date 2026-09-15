@@ -1,0 +1,13 @@
+{
+  "name": "ВОЛГАСТРОЙ 76 — дома, бассейны, сети",
+  "short_name": "ВОЛГАСТРОЙ 76",
+  "description": "Каркасные дома, бассейны и наружные сети в Ярославской области",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050a13",
+  "theme_color": "#050a13",
+  "lang": "ru",
+  "icons": [
+    { "src": "img/logo.jpg", "sizes": "256x256", "type": "image/jpeg", "purpose": "any" }
+  ]
+}
