@@ -1,5 +1,5 @@
 import React from 'react';
-import { Phone, MapPin, Send, Compass, Lock, ExternalLink, Mail, ShieldCheck } from 'lucide-react';
+import { Phone, MapPin, Compass, Mail, ShieldCheck } from 'lucide-react';
 
 export const Footer: React.FC = () => {
   return (
@@ -89,23 +89,23 @@ export const Footer: React.FC = () => {
             </ul>
           </div>
 
-          {/* Col 4: Hosting & Admin */}
+          {/* Col 4: Guarantees & Engineering Quality */}
           <div className="space-y-3">
             <div className="text-white font-bold uppercase tracking-wider text-xs border-b border-slate-800 pb-2">
-              Инфраструктура
+              Гарантии и контроль
             </div>
             <p className="text-[11px] text-slate-400 leading-relaxed font-sans">
-              Развёрнуто на сервере Timeweb (PHP 8 + SQLite).
-              Статическая сборка фронтенда не требует постоянного процесса Node.js.
+              Официальный договор с фиксированной сметой без скрытых доплат.
+              Инструментальный контроль отметок и сдача каждого этапа по актам скрытых работ.
             </p>
-            <div className="pt-2">
-              <a
-                href="/admin.php"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:text-blue-400 hover:border-slate-700 transition-colors text-[11px]"
-              >
-                <Lock className="w-3.5 h-3.5 text-slate-400" />
-                <span>Панель управления (admin.php)</span>
-              </a>
+            <div className="pt-2 flex flex-col gap-1.5 text-[11px] text-slate-400">
+              <div className="flex items-center gap-1.5 text-slate-300">
+                <ShieldCheck className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                <span>Гарантия на несущий конструктив 1 год</span>
+              </div>
+              <div className="text-[10px] text-slate-400">
+                г. Ярославль и Ярославская область · Пн–Вс 8:00–21:00
+              </div>
             </div>
           </div>
         </div>

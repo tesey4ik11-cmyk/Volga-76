@@ -1,803 +1,626 @@
 import { ConfiguratorState, EstimateCalculation, EstimateRow } from '../types';
+import { WORK_RATES, MATERIAL_RATES, RateItem } from '../data/estimateRates';
 
+/**
+ * Вспомогательное форматирование денежных сумм
+ */
 export function formatRuble(val: number): string {
-  return Math.round(val).toLocaleString('ru-RU') + ' ₽';
-}
-
-export function formatNumber(val: number): string {
-  return (Math.round(val * 100) / 100).toLocaleString('ru-RU');
+  return new Intl.NumberFormat('ru-RU').format(Math.round(val)) + ' ₽';
 }
 
 /**
- * Расчет детальной сметы строительного объекта.
- * Все расценки основаны на реальном рынке строительных услуг и материалов Ярославской области
- * с дисконтом 10% от среднерыночной стоимости (прямые поставки, собственный парк спецтехники).
+ * Профессиональный расчетный движок ВОЛГАСТРОЙ 76.
+ * Полностью rate-based архитектура: объем × расценка = стоимость.
+ * Без использования фиктивного распределения сумм (alloc).
+ * Каждая позиция обоснована физическим объемом и региональной ставкой (ЯО, 2026).
  */
-export function calculateEstimate(state: ConfiguratorState): EstimateCalculation {
-  let sum = 0;
+export function calculateEstimate(config: ConfiguratorState): EstimateCalculation {
+  const rows: EstimateRow[] = [];
   let workSum = 0;
   let matSum = 0;
-  const rows: EstimateRow[] = [];
-  let title = '';
-  let subtitle = '';
 
-  let currentKind: 'w' | 'm' = 'w';
+  // Хелпер добавления заголовка раздела
+  const addHeader = (name: string, note = '') => {
+    rows.push({
+      name,
+      note,
+      cost: 0,
+      kind: 'h',
+    });
+  };
 
-  function H(groupTitle: string) {
-    rows.push({ name: groupTitle, note: '', cost: 0, kind: 'h' });
-  }
+  // Хелпер добавления строки работ или материалов
+  const addRow = (
+    rate: RateItem,
+    volume: number,
+    customName?: string,
+    customNote?: string
+  ) => {
+    const vol = Math.round(volume * 100) / 100;
+    if (vol <= 0) return;
 
-  function F(name: string, note: string, value: number, kind: 'w' | 'm' = currentKind): number {
-    const v = Math.round(value);
-    sum += v;
-    if (kind === 'w') workSum += v;
-    else matSum += v;
-    rows.push({ name, note, cost: v, kind });
-    return v;
-  }
+    const cost = Math.round(vol * rate.price);
+    const kind: 'w' | 'm' = rate.type === 'work' ? 'w' : 'm';
 
-  function alloc(base: number, items: [string, number, string, number][], kind: 'w' | 'm' = currentKind) {
-    const roundedBase = Math.round(base);
-    let totalWeight = 0;
-    for (let i = 0; i < items.length; i++) totalWeight += items[i][3];
-    if (totalWeight <= 0) return;
-
-    let accumulated = 0;
-    for (let i = 0; i < items.length; i++) {
-      const it = items[i];
-      const isLast = i === items.length - 1;
-      const v = isLast ? (roundedBase - accumulated) : Math.round((roundedBase * it[3]) / totalWeight);
-      accumulated += v;
-      sum += v;
-      if (kind === 'w') workSum += v;
-      else matSum += v;
-
-      const q = it[1];
-      const unit = it[2];
-      let note = '';
-      if (q > 0) {
-        const price = Math.round(v / q);
-        note = `${formatRuble(price)} × ${formatNumber(q)} ${unit}`;
-      } else {
-        note = unit;
-      }
-      rows.push({ name: it[0], note, cost: v, kind });
-    }
-  }
-
-  if (state.category === 'house') {
-    const a = state.houseArea;
-    const metal = state.houseMaterial === 'metal';
-    const turnkey = state.houseKit === 'turnkey';
-    const kitName = turnkey ? 'Под ключ' : 'Силовой каркас (коробка)';
-    const matName = metal ? 'металлокаркас' : 'деревянный каркас';
-
-    // Геометрические параметры здания
-    const side = Math.sqrt(a / 1.35);
-    const perim = Math.round((side * 1.35 + side) * 2);
-    const wallA = Math.round(perim * 2.7);
-    const roofA = Math.round(a * 1.18);
-    const windowsCount = Math.max(3, Math.round(a / 12));
-    const doorsCount = 1; // входная сейф-дверь с терморазрывом
-    const intDoorsCount = Math.max(2, Math.round(a / 22));
-
-    // Расценки Ярославской области -10%
-    currentKind = 'w';
-    if (turnkey) {
-      // ПОД КЛЮЧ: полный цикл работ
-      H('Монтажные и строительные работы (под ключ)');
-      const L: [string, number, string, number][] = [
-        ['Геодезическая разметка, разбивка осей нивелиром', a, 'м²', 0.02],
-      ];
-
-      if (metal) {
-        L.push(['Сборка и монтаж несущего металлокаркаса (профтруба 100×100/100×50)', a, 'м²', 0.20]);
-        L.push(['Антикоррозийная покраска сварных узлов и швов', a, 'м²', 0.05]);
-        L.push(['Монтаж сэндвич-панелей стен и кровли (герметизация замков)', wallA + roofA, 'м²', 0.20]);
-      } else {
-        L.push(['Сборка силового каркаса стен и перекрытий из сухой доски', a, 'м²', 0.22]);
-        L.push(['Ветрозащита, контробрешетка, фасадная обшивка с вензазором', wallA, 'м²', 0.16]);
-        L.push(['Огнебиозащитная обработка древесины методом распыления', a, 'м²', 0.04]);
-      }
-
-      L.push(['Монтаж стропильной системы с усилением узлов', roofA, 'м²', 0.10]);
-      L.push(['Монтаж кровельного покрытия (металлочерепица Grand Line 0.5 мм)', roofA, 'м²', 0.11]);
-      L.push(['Подшивка карнизных свесов софитами и монтаж водостока', perim, 'м.п.', 0.06]);
-      L.push(['Монтаж 2-камерных энергосберегающих окон ПВХ и входной двери', windowsCount + doorsCount, 'шт', 0.07]);
-      L.push(['Утепление контура 150/200 мм (пол, стены, кровля) с пароизоляцией', a, 'м²', 0.09]);
-      L.push(['Внутренняя черновая обшивка влагостойким ГКЛ Knauf', wallA, 'м²', 0.08]);
-      L.push(['Электромонтажные работы (кабель ВВГнг-LS в гофре, щит с УЗО)', a, 'м²', 0.08]);
-
-      // Базовая стоимость работ под ключ в ЯО (-10%): металл 19 800 ₽/м², дерево 17 500 ₽/м²
-      const turnkeyWorkRate = metal ? 19800 : 17500;
-      alloc(a * turnkeyWorkRate, L, 'w');
+    if (kind === 'w') {
+      workSum += cost;
     } else {
-      // ТОЛЬКО КАРКАС / КОРОБКА:
-      // ВНИМАНИЕ: СТРОГО НЕТ сэндвич-панелей, НЕТ утепления, НЕТ окон, НЕТ дверей, НЕТ чистовой кровли, НЕТ свесов и водосточки!
-      H('Монтаж силового каркаса здания (только коробка)');
-      const L: [string, number, string, number][] = [
-        ['Геодезическая разметка, привязка к границам, вынос осей', a, 'м²', 0.05],
-      ];
+      matSum += cost;
+    }
 
-      if (metal) {
-        L.push(['Сборка и сварка колонн, балок и ригелей металлокаркаса', a, 'м²', 0.55]);
-        L.push(['Монтаж металлической стропильной фермы и связей жесткости', roofA, 'м²', 0.28]);
-        L.push(['Антикоррозийная грунтовка и покраска сварных стыков 3-в-1', a, 'м²', 0.12]);
-      } else {
-        L.push(['Монтаж несущего каркаса стен из сухой строганой доски 50×150/200', a, 'м²', 0.52]);
-        L.push(['Монтаж балок перекрытий и стропильной системы с коньком', roofA, 'м²', 0.28]);
-        L.push(['Ветро-гидрозащитная диффузионная мембрана с контрбруском', wallA, 'м²', 0.12]);
-        L.push(['Глубокая огнебиозащитная обработка каркаса (1 группа защиты)', a, 'м²', 0.08]);
+    const note =
+      customNote ||
+      `${vol} ${rate.unit} × ${formatRuble(rate.price)} (рынок ${formatRuble(rate.marketPrice)})`;
+
+    rows.push({
+      id: rate.id,
+      name: customName || rate.name,
+      note,
+      cost,
+      kind,
+      volume: vol,
+      unit: rate.unit,
+      unitPrice: rate.price,
+      marketPrice: rate.marketPrice,
+      marketMin: rate.marketMin,
+      marketMax: rate.marketMax,
+      marketAverage: rate.marketAverage,
+      marketMedian: rate.marketMedian,
+      source: rate.source,
+      sourceUrls: rate.sourceUrls,
+      checkedAt: rate.checkedAt,
+      assumptions: rate.assumptions,
+    });
+  };
+
+  // ==========================================
+  // КАТЕГОРИЯ 1: ДОМ (КАРКАСНЫЙ / МОДУЛЬНЫЙ)
+  // ==========================================
+  if (config.category === 'house') {
+    const area = Math.max(15, config.houseArea || 48);
+    const isMetal = config.houseMaterial === 'metal';
+    const isTurnkey = config.houseKit === 'turnkey';
+
+    // Геометрия дома: периметр стен и площадь кровли
+    // Предполагаем соотношение сторон ~ 1 : 1.33
+    const width = Math.sqrt(area * 1.33);
+    const depth = area / width;
+    const perim = 2 * (width + depth);
+    const wallHeight = 2.7;
+    const wallArea = Math.round(perim * wallHeight * 10) / 10;
+    const roofArea = Math.round(area * 1.22 * 10) / 10; // с учетом свесов и уклона 22°
+
+    // 1. Свайный фундамент (если выбран)
+    if (config.houseFund) {
+      addHeader('1. СВАЙНЫЙ ФУНДАМЕНТ (НИЖЕ ГЛУБИНЫ ПРОМЕРЗАНИЯ ЯО)');
+      const pileCount = Math.max(12, Math.round(area / 3.5));
+      const rostverkLen = Math.round(perim * 1.25); // швеллер обвязки
+
+      // Работы
+      addRow(WORK_RATES['pile-install-108'], pileCount);
+      addRow(WORK_RATES['pile-laser-cut'], pileCount);
+      addRow(WORK_RATES['pile-weld-cap'], pileCount);
+      addRow(WORK_RATES['pile-concrete-fill'], pileCount);
+      addRow(WORK_RATES['pile-rostverk-install'], rostverkLen);
+
+      // Материалы
+      if (config.houseMatInclude) {
+        addRow(MATERIAL_RATES['pile-screw-108-mat'], pileCount);
+        addRow(MATERIAL_RATES['pile-cap-mat'], pileCount);
+        addRow(MATERIAL_RATES['pile-cps-mat'], Math.round(pileCount * 1.5));
+        addRow(MATERIAL_RATES['pile-channel-140-mat'], rostverkLen);
       }
-
-      // Базовая стоимость работ только каркаса в ЯО (-10%): металл 6 800 ₽/м², дерево 5 800 ₽/м²
-      const frameWorkRate = metal ? 6800 : 5800;
-      alloc(a * frameWorkRate, L, 'w');
     }
 
-    // Фундамент дома (если выбран)
-    if (state.houseFund) {
-      const np = Math.max(9, Math.round(a / 4.5));
-      const mP = perim;
+    // 2. Силовой несущий каркас
+    addHeader(
+      isMetal
+        ? '2. СИЛОВОЙ НЕСУЩИЙ МЕТАЛЛОКАРКАС'
+        : '2. СИЛОВОЙ КАРКАС ИЗ СУХОЙ СТРОГАНОЙ ДОСКИ'
+    );
 
-      H('Свайный фундамент (монтажные работы)');
-      // Работы по сваям (-10% от рынка ЯО): завинчивание 1 305 ₽, срезка+бетонирование 405 ₽, обвязка 720 ₽/м.п.
-      const fundWorkSum = np * 1305 + np * 405 + mP * 720;
-      alloc(fundWorkSum, [
-        ['Механизированное завинчивание винтовых свай Ø89/108 мм L=2.5–3.0 м', np, 'шт', 0.52],
-        ['Нивелирование в горизонт, срезка и бетонирование стволов ЦПС М300', np, 'шт', 0.18],
-        ['Приварка усиленных оголовков и обвязка швеллером 140 ГОСТ', mP, 'м.п.', 0.30],
-      ], 'w');
+    if (isMetal) {
+      // Работы металлокаркаса
+      addRow(WORK_RATES['frame-metal-fabrication-work'], area);
+      addRow(WORK_RATES['frame-metal-erection-work'], area);
+      addRow(WORK_RATES['frame-metal-truss-work'], roofArea);
+      addRow(WORK_RATES['frame-metal-paint-work'], wallArea + roofArea);
 
-      // Материалы на фундамент: сваи, оголовки, бетон, швеллер
-      H('Материалы свайного фундамента (оптовая закупка со скидкой 10%)');
-      const pileMatCost = np * 2295; // свая Ø89 L=2500мм с литым наконечником
-      const capMatCost = np * 378;   // оголовок 200х200 с косынками
-      const concMatCost = np * 342;  // ЦПС М300 для стволов (1.5 мешка на сваю)
-      const rostMatCost = mP * 1305; // швеллер 140 ГОСТ
-      const fundMatTotal = pileMatCost + capMatCost + concMatCost + rostMatCost;
+      // Материалы металлокаркаса
+      if (config.houseMatInclude) {
+        addRow(MATERIAL_RATES['metal-tubes-mat'], area);
+        addRow(MATERIAL_RATES['metal-hardware-mat'], area);
+        addRow(
+          MATERIAL_RATES['metal-primer-mat'],
+          Math.round((wallArea + roofArea) * 0.25)
+        );
+      }
+    } else {
+      // Работы деревянного каркаса
+      addRow(WORK_RATES['frame-wood-walls-work'], wallArea);
+      addRow(WORK_RATES['frame-wood-floors-work'], area);
+      addRow(WORK_RATES['frame-wood-rafters-work'], roofArea);
+      addRow(
+        WORK_RATES['frame-wood-antiseptic-work'],
+        wallArea + area + roofArea
+      );
 
-      alloc(fundMatTotal, [
-        ['Винтовые сваи стальные Ø89 мм L=2500 с литым наконечником и эпоксидом', np, 'шт', pileMatCost / fundMatTotal],
-        ['Оголовки свай усиленные 200×200 мм с ребрами жесткости', np, 'шт', capMatCost / fundMatTotal],
-        ['Сухая смесь М300 пескобетон для антикоррозийного бетонирования стволов', Math.round(np * 1.5), 'мешков', concMatCost / fundMatTotal],
-        ['Швеллер горячекатаный 140 ГОСТ 8240-97 для обвязки ростверка', mP, 'м.п.', rostMatCost / fundMatTotal],
-      ], 'm');
+      // Материалы деревянного каркаса
+      if (config.houseMatInclude) {
+        const lumberVol = Math.round(area * 0.16 * 10) / 10; // ~0.16 м³ пиломатериала на 1 м² пола
+        addRow(MATERIAL_RATES['wood-lumber-dry-mat'], lumberVol);
+        addRow(MATERIAL_RATES['wood-fasteners-mat'], area);
+        addRow(MATERIAL_RATES['wood-membrane-mat'], wallArea + roofArea);
+        addRow(
+          MATERIAL_RATES['wood-antiseptic-mat'],
+          Math.round((wallArea + area + roofArea) * 0.25)
+        );
+      }
     }
 
-    if (state.houseCrane) {
-      F('Спецтехника и логистика в пределах Ярославской области', 'Манипулятор-вездеход 7т, доставка конструкций, выгрузка и монтажные подъемы', 48000, 'w');
-    }
+    // 3. Комплектация «ПОД КЛЮЧ»
+    // ВНИМАНИЕ: Если выбрана «Силовая коробка» (frame), этот блок НЕ рассчитывается вовсе!
+    if (isTurnkey) {
+      addHeader('3. ОГРАЖДАЮЩИЕ КОНСТРУКЦИИ, УТЕПЛЕНИЕ И КРОВЛЯ (ПОД КЛЮЧ)');
 
-    if (state.houseMatInclude) {
-      if (turnkey) {
-        // ПОД КЛЮЧ МАТЕРИАЛЫ: каркас + фасад/сэндвич + кровля + водосток + утеплитель + окна + двери + ГКЛ + электрика
-        H('Материалы здания под ключ (оптовые цены ЯО со скидкой 10%)');
-        const M: [string, number, string, number][] = [];
+      if (isMetal) {
+        // Металлокаркас под ключ комплектуется сэндвич-панелями
+        addRow(WORK_RATES['sandwich-wall-work'], wallArea);
+        addRow(WORK_RATES['sandwich-roof-work'], roofArea);
 
-        if (metal) {
-          M.push(['Профильная труба 100×100×4, 100×50×3, швеллер, пластины ГОСТ', a, 'м²', 0.22]);
-          M.push(['Сэндвич-панели стеновые и кровельные 100/150 мм (минвата/PIR)', wallA + roofA, 'м²', 0.26]);
-          M.push(['Антикоррозийный грунт-эмаль 3-в-1 для металлоконструкций', a, 'м²', 0.02]);
-        } else {
-          M.push(['Пиломатериал сухой строганый хвойный сорт 1 (камерная сушка)', a, 'м²', 0.24]);
-          M.push(['Влагостойкие фасадные плиты OSB-3, диффузионные мембраны Tyvek', wallA, 'м²', 0.12]);
-          M.push(['Конструкционный оцинкованный крепеж, усиленные уголки и шпильки', a, 'м²', 0.05]);
-          M.push(['Огнебиозащитный антисептик Neomid 430 Eco концентрат', a, 'м²', 0.02]);
+        if (config.houseMatInclude) {
+          addRow(MATERIAL_RATES['sandwich-wall-mat'], wallArea);
+          addRow(MATERIAL_RATES['sandwich-roof-mat'], roofArea);
         }
-
-        M.push(['Кровельное покрытие: металлочерепица Grand Line Classic 0.5 мм с доборами', roofA, 'м²', 0.13]);
-        M.push(['Водосточная система металлическая Grand Line 125/90 со сливами', perim, 'м.п.', 0.04]);
-        M.push(['Софиты металлические перфорированные для карнизных свесов', perim, 'м.п.', 0.03]);
-        M.push(['Базальтовый утеплитель Rockwool 150/200 мм + пароизоляция Delta', a, 'м²', 0.11]);
-
-        // ОТДЕЛЬНО ВЫДЕЛЕННЫЕ ОКНА И ДВЕРИ В МАТЕРИАЛАХ
-        M.push(['Окна ПВХ Rehau Grazio 70мм 2-камерные стеклопакеты, Roto, отливы', windowsCount, 'шт', 0.12]);
-        M.push(['Входная сейф-дверь коттеджная с терморазрывом и 3 контурами уплотнения', doorsCount, 'шт', 0.04]);
-        M.push(['Межкомнатные двери экошпон с фурнитурой и наличниками', intDoorsCount, 'шт', 0.03]);
-        M.push(['Влагостойкий гипсокартон ГКЛВ Knauf 12.5мм, профиль и шпаклевка', wallA, 'м²', 0.06]);
-        M.push(['Кабель силовой ГОСТ ВВГнг-LS Конкорд, гофра, автоматика ABB', a, 'м²', 0.05]);
-
-        const turnkeyMatRate = metal ? 22500 : 18500;
-        alloc(a * turnkeyMatRate, M, 'm');
       } else {
-        // ТОЛЬКО КАРКАС МАТЕРИАЛЫ:
-        // ВНИМАНИЕ: СТРОГО НЕТ сэндвич-панелей, НЕТ утеплителя, НЕТ окон, НЕТ дверей, НЕТ водосточки!
-        H('Материалы силового каркаса (только силовой контур)');
-        const M: [string, number, string, number][] = [];
+        // Деревянный каркас под ключ: утепление, OSB, металлочерепица Grand Line
+        addRow(WORK_RATES['wood-facade-osb-work'], wallArea);
+        addRow(WORK_RATES['insulation-walls-work'], wallArea);
+        addRow(WORK_RATES['insulation-floor-roof-work'], area + roofArea);
+        addRow(WORK_RATES['roof-metal-sheet-work'], roofArea);
+        addRow(
+          WORK_RATES['roof-gutters-soffits-work'],
+          Math.round(perim * 1.1)
+        );
 
-        if (metal) {
-          M.push(['Профильная труба 100×100×4 / 100×50×3 / швеллер 140 ГОСТ', a, 'м²', 0.82]);
-          M.push(['Фасонный металлопрокат, пластины, метизы, анкеры 8.8', a, 'м²', 0.12]);
-          M.push(['Антикоррозийный грунт-эмаль 3-в-1 по ржавчине', a, 'м²', 0.06]);
-        } else {
-          M.push(['Пиломатериал сухой строганый хвойный камерной сушки 50×150/50×200', a, 'м²', 0.76]);
-          M.push(['Конструкционный оцинкованный крепеж, уголки, пластины, глухари', a, 'м²', 0.11]);
-          M.push(['Супердиффузионная гидроветрозащитная мембрана Ondutiss Pro', wallA, 'м²', 0.08]);
-          M.push(['Огнебиозащитный состав Neomid 430 Eco (1 группа эффективности)', a, 'м²', 0.05]);
+        if (config.houseMatInclude) {
+          addRow(MATERIAL_RATES['facade-osb-mat'], wallArea);
+          // Объем базальтового утеплителя: стены 150мм + перекрытия 200мм + кровля 200мм
+          const insulVol =
+            Math.round(
+              (wallArea * 0.15 + area * 0.20 + roofArea * 0.20) * 10
+            ) / 10;
+          addRow(MATERIAL_RATES['insulation-rockwool-mat'], insulVol);
+          addRow(
+            MATERIAL_RATES['vapor-barrier-mat'],
+            wallArea + area + roofArea
+          );
+          addRow(MATERIAL_RATES['roof-metal-classic-mat'], roofArea);
+          addRow(
+            MATERIAL_RATES['roof-gutters-mat'],
+            Math.round(perim * 0.6)
+          );
+          addRow(
+            MATERIAL_RATES['roof-soffits-mat'],
+            Math.round(perim * 0.5)
+          );
         }
+      }
 
-        const frameMatRate = metal ? 9500 : 7200;
-        alloc(a * frameMatRate, M, 'm');
+      // 4. Окна и двери (строго поштучно!)
+      addHeader('4. ОКОННЫЕ И ДВЕРНЫЕ БЛОКИ (ПОШТУЧНО ПО ГОСТ)');
+      const windowCount = Math.max(3, Math.round(area / 12));
+      const entryDoorCount = 1;
+
+      addRow(WORK_RATES['window-install-work'], windowCount);
+      addRow(WORK_RATES['entry-door-install-work'], entryDoorCount);
+
+      if (config.houseMatInclude) {
+        addRow(MATERIAL_RATES['window-rehau-mat'], windowCount);
+        addRow(MATERIAL_RATES['entry-door-thermo-mat'], entryDoorCount);
       }
     }
 
-    title = 'Здание / Каркасный дом';
-    subtitle = `Площадь ${a} м² · ${matName} · ${kitName}`;
-  } else if (state.category === 'pool') {
-    // БАССЕЙН: земляные работы, чаша, обвязка, павильон, техпомещение, терраса на сваях
-    H('Земляные и строительно-монтажные работы по установке чаши');
-    alloc(165000, [
-      ['Разработка котлована мини-экскаватором с планировкой дна', 28, 'м³', 0.28],
-      ['Устройство песчано-щебеночной подушки 200 мм с трамбовкой', 18, 'м²', 0.22],
-      ['Монтаж и нивелирование чаши бассейна с обратной засыпкой ЦПС', 1, 'комплект', 0.50],
-    ], 'w');
+    // 5. Автокран / Спецтехника (если включен)
+    if (config.houseCrane) {
+      addHeader('5. СПЕЦТЕХНИКА И МОНТАЖНЫЙ КРАН');
+      const craneShifts = Math.max(2, Math.ceil(area / 35));
+      const craneRate: RateItem = {
+        id: 'crane-shift',
+        name: 'Аренда автокрана 25т (машино-смена 8 часов с ГСМ и оператором)',
+        unit: 'смена',
+        marketPrice: 24000,
+        marketMin: 21000,
+        marketMax: 27500,
+        marketAverage: 24167,
+        marketMedian: 24000,
+        price: 21600,
+        category: 'metal-frame',
+        type: 'work',
+        region: 'Ярославская область',
+        source: 'Диспетчерская служба «Спецтехника 76» Ярославль, Тормозное шоссе',
+        sourceUrls: ['https://spec-tehnika76.ru/arenda-krana', 'https://yaroslavl.tiu.ru/arenda-avtokrana'],
+        date: '2026-02',
+        checkedAt: '2026-02-15',
+        assumptions: 'Машино-смена 7+1 час, подача в пределах Ярославля и пригорода до 30 км, аттестованный крановщик, топливо включено',
+        notes: 'Разгрузка и монтаж крупногабаритных конструкций на объекте',
+      };
+      addRow(craneRate, craneShifts);
+    }
+  }
 
-    H('Композитная чаша бассейна (производство)');
-    alloc(420000, [
-      ['Композитная бесшовная чаша 5.2×3.2×1.45 м (усиленный гелькоут, цвет Лазурь)', 1, 'шт', 0.90],
-      ['Закладные элементы из нержавеющей стали AISI 316 (донный слив, форсунки, скиммер)', 1, 'комплект', 0.10],
-    ], 'm');
+  // ==========================================
+  // КАТЕГОРИЯ 2: ВИНТОВЫЕ СВАИ (СВАЙНОЕ ПОЛЕ)
+  // ==========================================
+  else if (config.category === 'pile') {
+    const count = Math.max(4, config.pileCount || 20);
+    const dia = config.pileDia || '89';
 
-    if (state.poolPipe) {
-      H('Инженерная обвязка и станция фильтрации (работы)');
-      alloc(45000, [
-        ['Монтаж трубной обвязки ПВХ клеевой напорной трубы d50 мм', 35, 'м.п.', 0.35],
-        ['Монтаж и пусконаладка фильтровальной установки с насосом', 1, 'станция', 0.45],
-        ['Электроподключение с УЗО и заземлением', 1, 'линия', 0.20],
-      ], 'w');
+    addHeader(`1. ВИНТОВЫЕ СВАИ Ø${dia} ММ (ЗАВОДСКОЕ ПРОИЗВОДСТВО ЯО)`);
 
-      H('Оборудование водоподготовки и фильтрации (материалы)');
-      alloc(115000, [
-        ['Песочный фильтр Kripsol с 6-позиционным клапаном переключения', 1, 'шт', 0.46],
-        ['Циркуляционный насос с префильтром Kripsol 10 м³/час', 1, 'шт', 0.32],
-        ['Кварцевый прокаленный песок фракции 0.4–0.8 мм (мешки по 25 кг)', 4, 'мешка', 0.06],
-        ['Трубы, краны, обратные клапаны и фитинги ПВХ Coraplax', 1, 'комплект', 0.16],
-      ], 'm');
+    // Подбор расценок по диаметру
+    const installWorkKey = `pile-install-${dia}`;
+    const pileMatKey = `pile-screw-${dia}-mat`;
+
+    const installWork = WORK_RATES[installWorkKey] || WORK_RATES['pile-install-89'];
+    const pileMat = MATERIAL_RATES[pileMatKey] || MATERIAL_RATES['pile-screw-89-mat'];
+
+    // 1. Работы по завинчиванию
+    addRow(installWork, count);
+    addRow(WORK_RATES['pile-laser-cut'], count);
+    addRow(WORK_RATES['pile-weld-cap'], count);
+
+    // Бетонирование внутренней полости сваи (только если выбрано pileFill!)
+    if (config.pileFill) {
+      addRow(WORK_RATES['pile-concrete-fill'], count);
     }
 
-    // Павильон
-    if (state.poolPavilion === 'slide') {
-      H('Раздвижной телескопический павильон (монтаж)');
-      alloc(76500, [
-        ['Монтаж прецизионных ходовых рельсов по лазерному уровню', 14, 'м.п.', 0.35],
-        ['Сборка 3 телескопических арочных секций на колесных опорах', 3, 'секции', 0.45],
-        ['Регулировка легкого хода и торцевых силиконовых уплотнителей', 1, 'комплект', 0.20],
-      ], 'w');
+    // 2. Материалы свайного поля
+    addRow(pileMat, count);
+    addRow(MATERIAL_RATES['pile-cap-mat'], count);
 
-      H('Комплект раздвижного павильона (материалы со скидкой 10%)');
-      alloc(215000, [
-        ['Анодированный алюминиевый силовой профиль и ходовые рельсы', 1, 'комплект', 0.48],
-        ['Монолитный ударопрочный поликарбонат 4 мм с двойной УФ-защитой', 42, 'м²', 0.42],
-        ['Роликовые каретки из нержавеющей стали с закрытыми подшипниками', 12, 'шт', 0.10],
-      ], 'm');
-    } else if (state.poolPavilion === 'poly') {
-      H('Стационарный защитный павильон (монтаж)');
-      alloc(45000, [
-        ['Сборка арочного металлокаркаса и закрепление к основанию', 5, 'арок', 0.50],
-        ['Монтаж сотового поликарбоната с торцевыми профилями', 32, 'м²', 0.50],
-      ], 'w');
-
-      H('Материалы арочного павильона');
-      alloc(118000, [
-        ['Арочные секции из оцинкованной профильной трубы 40×20', 1, 'комплект', 0.45],
-        ['Сотовый поликарбонат премиум 8 мм с защитой от ультрафиолета', 32, 'м²', 0.45],
-        ['Термошайбы, герметизирующие и перфорированные ленты', 1, 'комплект', 0.10],
-      ], 'm');
+    if (config.pileFill) {
+      // 1.5 мешка на сваю L=2.5м
+      addRow(MATERIAL_RATES['pile-cps-mat'], Math.round(count * 1.5));
     }
 
-    // Техпомещение
-    if (state.poolTech) {
-      H('Техническое помещение для оборудования бассейна (монтаж)');
-      alloc(16200, [
-        ['Земляные работы под приямок кессона и песчаная подушка', 1, 'объект', 0.40],
-        ['Монтаж защитного кессон-бокса с врезкой кабельных и трубных проходов', 1, 'бокс', 0.60],
-      ], 'w');
+    // 3. Обвязка швеллером (только если выбрано pileRostverk!)
+    if (config.pileRostverk) {
+      addHeader('2. ОБВЯЗКА ШВЕЛЛЕРОМ 140 ГОСТ (РОСТВЕРК)');
+      // Длина швеллера оценивается ~ 1.7 м на сваю
+      const channelLen = Math.round(count * 1.7);
+      addRow(WORK_RATES['pile-rostverk-install'], channelLen);
+      addRow(MATERIAL_RATES['pile-channel-140-mat'], channelLen);
+    }
+  }
 
-      H('Кессон-бокс технического помещения (материалы)');
-      alloc(37800, [
-        ['Герметичный стеклопластиковый кессон-бокс с утепленной откидной крышкой', 1, 'шт', 0.85],
-        ['Вентиляционные решетки и дренажный трап', 1, 'комплект', 0.15],
-      ], 'm');
+  // ==========================================
+  // КАТЕГОРИЯ 3: ТЕРРАСА ИЗ ДПК
+  // ==========================================
+  else if (config.category === 'deck') {
+    const area = Math.max(6, config.deckArea || 24);
+    const isDiag = config.deckLayout === 'diag';
+    const stepsCount = config.deckSteps ?? 2;
+
+    // Габариты террасы для расчета периметра
+    const width = Math.sqrt(area * 1.4);
+    const depth = area / width;
+    const perim = Math.round(2 * (width + depth) * 10) / 10;
+
+    addHeader('1. НАСТИЛ ТЕРРАСНОЙ ДОСКИ ДПК И ЛАГИ');
+
+    if (isDiag) {
+      // Диагональная укладка 45°: сложная подрезка, учащенный шаг лаг 280 мм, фриз по периметру
+      addRow(WORK_RATES['deck-lags-diag-work'], area);
+      addRow(WORK_RATES['deck-frieze-work'], perim);
+
+      // Материалы с запасом 10% на косую подрезку
+      const boardArea = Math.round(area * 1.1 * 10) / 10;
+      addRow(MATERIAL_RATES['deck-board-dpk-mat'], boardArea);
+      addRow(MATERIAL_RATES['deck-lags-dpk-mat'], Math.round(area * 4.2)); // шаг 280мм
+      addRow(MATERIAL_RATES['deck-clips-mat'], area);
+      addRow(MATERIAL_RATES['deck-frieze-mat'], perim);
+    } else {
+      // Прямая укладка: шаг лаг 380 мм
+      addRow(WORK_RATES['deck-lags-straight-work'], area);
+      addRow(MATERIAL_RATES['deck-board-dpk-mat'], area);
+      addRow(MATERIAL_RATES['deck-lags-dpk-mat'], Math.round(area * 3.2));
+      addRow(MATERIAL_RATES['deck-clips-mat'], area);
     }
 
-    // Терраса вокруг бассейна
-    if (state.poolDeck) {
-      const deckA = 24; // ~24 м² прибассейной зоны
-      H('Прибассейная терраса из ДПК (монтажные работы)');
-      alloc(deckA * 1250, [
-        ['Монтаж несущего металлокаркаса на оголовках свай', deckA, 'м²', 0.35],
-        ['Укладка лаг ДПК и монтаж террасной доски на кляймеры', deckA, 'м²', 0.65],
-      ], 'w');
-
-      H('Материалы прибассейной террасы ДПК и свай');
-      alloc(deckA * 3200, [
-        ['Террасная доска ДПК полнотелая брашированная (антискольжение)', deckA, 'м²', 0.55],
-        ['Монтажные лаги ДПК 40×50 и нержавеющие скрытые кляймеры', deckA, 'м²', 0.20],
-        ['Винтовые сваи Ø76 с оголовками и швеллером под террасу', 8, 'шт', 0.25],
-      ], 'm');
+    // 2. Свайный фундамент под террасу (только если выбрано deckPiles!)
+    if (config.deckPiles) {
+      addHeader('2. СВАЙНЫЙ ФУНДАМЕНТ ТЕРРАСЫ');
+      const pileCount = Math.max(6, Math.round(area / 2.8));
+      addRow(WORK_RATES['pile-install-76'], pileCount);
+      addRow(WORK_RATES['pile-laser-cut'], pileCount);
+      addRow(WORK_RATES['pile-weld-cap'], pileCount);
+      addRow(MATERIAL_RATES['pile-screw-76-mat'], pileCount);
+      addRow(MATERIAL_RATES['pile-cap-mat'], pileCount);
     }
 
-    title = 'Композитный бассейн';
-    subtitle = `Чаша 5.2×3.2 м · ${state.poolPavilion === 'slide' ? 'Раздвижной павильон' : state.poolPavilion === 'poly' ? 'Арочный павильон' : 'Без павильона'} · ${state.poolTech ? 'С техпомещением' : 'Без техпомещения'}`;
-  } else if (state.category === 'deck') {
-    // ТЕРРАСА ДПК
-    const a = state.deckArea;
-    const isDiag = state.deckLayout === 'diag';
-    const perim = Math.round(Math.sqrt(a) * 3.5);
+    // 3. Ограждения террасы (только если выбрано deckRail!)
+    if (config.deckRail) {
+      addHeader('3. БАЛЮСТРАДА И ОГРАЖДЕНИЯ ДПК');
+      // Длина перил = периметр минус проход к ступеням 1.8 м
+      const railLen = Math.max(3, Math.round(perim - 1.8));
+      const postCount = Math.max(4, Math.ceil(railLen / 1.8) + 2);
 
-    // Расценки с учетом дисконта 10%
-    const workRate = isDiag ? 1305 : 990; // диагональная укладка сложнее (подрезка под 45°)
-    const matRate = isDiag ? 2835 : 2520;  // расход доски на диагональ +10%
-
-    H(`Монтаж настила террасы (${isDiag ? 'диагональная' : 'прямая'} раскладка)`);
-    alloc(a * workRate, [
-      ['Монтаж опорных лаг ДПК (шаг ' + (isDiag ? '280 мм' : '380 мм') + ')', a, 'м²', 0.35],
-      ['Укладка террасной доски ДПК с термокомпенсационными зазорами', a, 'м²', 0.50],
-      ['Торцевая подрезка досок ' + (isDiag ? 'под углом 45°' : 'по периметру') + ' и монтаж уголков', perim, 'м.п.', 0.15],
-    ], 'w');
-
-    H('Материалы настила ДПК (оптовые цены ЯО со скидкой 10%)');
-    alloc(a * matRate, [
-      ['Террасная доска ДПК шовная 140×20 мм (двухсторонний вельвет)', a * (isDiag ? 1.10 : 1.05), 'м²', 0.65],
-      ['Монтажные подкладочные лаги ДПК 40×50 мм', Math.round(a * (isDiag ? 3.8 : 2.9)), 'м.п.', 0.20],
-      ['Крепежные кляймеры из нержавеющей стали с винтами Torx', Math.round(a * 22), 'шт', 0.10],
-      ['Торцевая финишная планка ДПК 60×10 мм по контуру', perim, 'м.п.', 0.05],
-    ], 'm');
-
-    // Сваи террасы
-    if (state.deckPiles) {
-      const np = Math.max(6, Math.round(a / 4.2));
-      H('Свайный фундамент террасы (монтажные работы)');
-      alloc(np * 1350, [
-        ['Завинчивание свай Ø76/89 мм L=2.0–2.5 м механизированным способом', np, 'шт', 0.70],
-        ['Срезка по лазерному горизонту и приварка оголовков', np, 'шт', 0.30],
-      ], 'w');
-
-      H('Материалы свайного фундамента террасы');
-      alloc(np * 2700, [
-        ['Винтовые сваи Ø76 мм L=2000 с литым наконечником', np, 'шт', 0.65],
-        ['Оголовки усиленные 150×150 мм', np, 'шт', 0.15],
-        ['Профильная труба 80×60 мм для обвязки ростверка', Math.round(np * 1.6), 'м.п.', 0.20],
-      ], 'm');
+      addRow(WORK_RATES['deck-railing-work'], railLen);
+      addRow(MATERIAL_RATES['deck-posts-mat'], postCount);
+      addRow(MATERIAL_RATES['deck-rail-mat'], railLen);
     }
 
-    // Ограждения
-    if (state.deckRail) {
-      const railLen = Math.round(perim * 0.85);
-      H('Модульные ограждения из ДПК (монтажные работы)');
-      alloc(railLen * 990, [
-        ['Монтаж опорных столбов ДПК со скрытыми металлическими закладными', Math.round(railLen / 1.4), 'столбов', 0.45],
-        ['Сборка поручней, подперильных планок и вертикальных балясин', railLen, 'м.п.', 0.55],
-      ], 'w');
+    // 4. Ступени террасы (только если deckSteps > 0!)
+    if (stepsCount > 0) {
+      addHeader('4. ВХОДНЫЕ СТУПЕНИ ИЗ ДПК');
+      addRow(WORK_RATES['deck-step-work'], stepsCount);
+      addRow(MATERIAL_RATES['deck-step-mat'], stepsCount);
+    }
+  }
 
-      H('Материалы ограждений ДПК (столбы, перила, балясины)');
-      alloc(railLen * 2160, [
-        ['Опорные столбы ДПК 100×100 мм с пирамидальными крышками и юбками', Math.round(railLen / 1.4), 'шт', 0.38],
-        ['Фигурный поручень ДПК 90×45 мм и нижний ригель', railLen * 2, 'м.п.', 0.32],
-        ['Вертикальные балясины ДПК 50×35 мм с крепежными стаканами', Math.round(railLen * 5.5), 'шт', 0.30],
-      ], 'm');
+  // ==========================================
+  // КАТЕГОРИЯ 4: КОМПОЗИТНЫЙ БАССЕЙН
+  // ==========================================
+  else if (config.category === 'pool') {
+    addHeader('1. КОМПОЗИТНАЯ ЧАША И СТРОИТЕЛЬНО-МОНТАЖНЫЕ РАБОТЫ');
+    addRow(WORK_RATES['pool-earth-prep-work'], 1);
+    addRow(WORK_RATES['pool-bowl-install-work'], 1);
+    addRow(MATERIAL_RATES['pool-bowl-52-mat'], 1);
+
+    // 2. Фильтрация и водоподготовка (только если выбрано poolPipe!)
+    if (config.poolPipe) {
+      addHeader('2. СИСТЕМА ФИЛЬТРАЦИИ И ТРУБНАЯ ОБВЯЗКА ПВХ');
+      addRow(WORK_RATES['pool-filtration-work'], 1);
+      addRow(MATERIAL_RATES['pool-filtration-station-mat'], 1);
     }
 
-    // Ступени
-    if (state.deckSteps > 0) {
-      const steps = state.deckSteps;
-      H('Ступени из ДПК (монтаж и материалы)');
-      alloc(steps * 1350, [
-        ['Сборка металлокаркаса ступеней и крепление к террасе', steps, 'шт', 0.45],
-        ['Монтаж ступеней из доски ДПК с торцевыми уголками', steps, 'шт', 0.55],
-      ], 'w');
-
-      alloc(steps * 2340, [
-        ['Ступенная полнотелая доска ДПК 340×24 мм', steps * 1.5, 'м.п.', 0.65],
-        ['Металлопрокат и крепеж несущих тетив лестницы', steps, 'комплект', 0.35],
-      ], 'm');
+    // 3. Кессон-бокс техпомещения (только если выбрано poolTech!)
+    if (config.poolTech) {
+      addHeader('3. КЕССОН ТЕХПОМЕЩЕНИЯ ДЛЯ ОБОРУДОВАНИЯ');
+      addRow(WORK_RATES['pool-tech-room-work'], 1);
+      addRow(MATERIAL_RATES['pool-tech-box-mat'], 1);
     }
 
-    title = 'Терраса из ДПК';
-    subtitle = `Площадь ${a} м² · ${isDiag ? 'Диагональная' : 'Прямая'} укладка · ${state.deckRail ? 'С ограждениями' : 'Без ограждений'}`;
-  } else if (state.category === 'pile') {
-    // СВАЙНОЕ ПОЛЕ:
-    // Полное разделение на РАБОТЫ и МАТЕРИАЛЫ для всех диаметров свай!
-    const n = state.pileCount;
-    const dia = state.pileDia;
-
-    // Расценки по ЯО -10%
-    const pilePriceMap: Record<string, { work: number; mat: number; name: string }> = {
-      '76': { work: 1170, mat: 1890, name: 'Винтовая свая Ø76 мм L=2500 стенка 3.5 мм' },
-      '89': { work: 1305, mat: 2295, name: 'Винтовая свая Ø89 мм L=2500 стенка 4.0 мм' },
-      '108': { work: 1530, mat: 2880, name: 'Винтовая свая Ø108 мм L=2500 стенка 4.0 мм' },
-      '133': { work: 1980, mat: 3960, name: 'Винтовая свая Ø133 мм L=2500 стенка 4.5 мм' },
-    };
-    const pConf = pilePriceMap[dia] || pilePriceMap['89'];
-
-    H('Монтаж винтового свайного поля (работы)');
-    alloc(n * pConf.work + n * 252, [
-      ['Лазерная разбивка свайного поля, привязка к осям строения', n, 'точек', 0.12],
-      [`Механизированное завинчивание свай Ø${dia} мм ниже глубины промерзания`, n, 'шт', 0.60],
-      ['Срезка свай в проектный горизонт ротационным нивелиром', n, 'шт', 0.10],
-      ['Приварка усиленных оголовков с контролем геометрии', n, 'шт', 0.18],
-    ], 'w');
-
-    H('Материалы свайного поля (оптовые цены ЯО со скидкой 10%)');
-    alloc(n * pConf.mat + n * 378, [
-      [pConf.name + ' с литым наконечником и двухкомпонентной защитой', n, 'шт', (n * pConf.mat) / (n * pConf.mat + n * 378)],
-      ['Оголовки усиленные 200×200 мм с косынками жесткости и отверстиями M12', n, 'шт', (n * 378) / (n * pConf.mat + n * 378)],
-    ], 'm');
-
-    // Бетонирование полостей свай
-    if (state.pileFill) {
-      H('Антикоррозийное бетонирование полостей свай');
-      alloc(n * 216, [
-        ['Заполнение внутренних полостей стволов свай раствором М300', n, 'стволов', 1.0],
-      ], 'w');
-
-      alloc(n * 342, [
-        ['Сухая смесь М300 пескобетон гидроизоляционный (мешки 50 кг)', Math.round(n * 1.5), 'мешков', 1.0],
-      ], 'm');
+    // 4. Павильон бассейна (только если poolPavilion !== 'none'!)
+    if (config.poolPavilion === 'slide') {
+      addHeader('4. ТЕЛЕСКОПИЧЕСКИЙ РАЗДВИЖНОЙ ПАВИЛЬОН НА РЕЛЬСАХ');
+      addRow(WORK_RATES['pool-pavilion-slide-work'], 1);
+      addRow(MATERIAL_RATES['pool-pavilion-slide-mat'], 1);
+    } else if (config.poolPavilion === 'poly') {
+      addHeader('4. АРОЧНЫЙ СТАЦИОНАРНЫЙ НАВЕС ИЗ ПОЛИКАРБОНАТА');
+      addRow(WORK_RATES['pool-pavilion-poly-work'], 1);
+      addRow(MATERIAL_RATES['pool-pavilion-poly-mat'], 1);
     }
 
-    // Обвязка швеллером
-    if (state.pileRostverk) {
-      const mP = Math.round(n * 1.8);
-      H('Обвязка ростверком по лазерному горизонту (работы)');
-      alloc(mP * 720, [
-        ['Монтаж и электросварка швеллера 140 ГОСТ по оголовкам свай', mP, 'м.п.', 0.70],
-        ['Зачистка и антикоррозийная покраска сварных швов эмалью 3-в-1', mP, 'м.п.', 0.30],
-      ], 'w');
+    // 5. Терраса вокруг бассейна (только если выбрано poolDeck!)
+    if (config.poolDeck) {
+      addHeader('5. ОБХОДНАЯ ЗОНА ТЕРРАСЫ ДПК НА СВАЯХ');
+      const deckAroundArea = 22; // настил шириной 1.2 м вокруг чаши 5.2×3.2 м
+      const pilesCount = 8;
 
-      H('Материалы обвязки свайного поля');
-      alloc(mP * 1305, [
-        ['Швеллер стальной горячекатаный 140 ГОСТ 8240-97', mP, 'м.п.', 0.92],
-        ['Эмаль антикоррозийная быстросохнущая и сварочные электроды УОНИ', 1, 'комплект', 0.08],
-      ], 'm');
+      addRow(WORK_RATES['deck-lags-straight-work'], deckAroundArea);
+      addRow(MATERIAL_RATES['deck-board-dpk-mat'], deckAroundArea);
+      addRow(
+        MATERIAL_RATES['deck-lags-dpk-mat'],
+        Math.round(deckAroundArea * 3.2)
+      );
+      addRow(MATERIAL_RATES['deck-clips-mat'], deckAroundArea);
+
+      // Сваи под обходную террасу
+      addRow(WORK_RATES['pile-install-76'], pilesCount);
+      addRow(MATERIAL_RATES['pile-screw-76-mat'], pilesCount);
+      addRow(MATERIAL_RATES['pile-cap-mat'], pilesCount);
     }
+  }
 
-    title = 'Свайный фундамент';
-    subtitle = `${n} свай Ø${dia} мм · ${state.pileRostverk ? 'С обвязкой швеллером' : 'Без обвязки'} · ${state.pileFill ? 'С бетонированием' : 'Без бетонирования'}`;
-  } else if (state.category === 'net') {
-    // ИНЖЕНЕРНЫЕ СЕТИ: выбор типа коммуникации с персональными подпунктами
-    const len = state.netLength;
-    const netType = state.netType;
-    const isDeep = state.netDeep;
-    const depthStr = isDeep ? '1.7–1.9 м (ниже промерзания)' : '1.2–1.4 м';
+  // ==========================================
+  // КАТЕГОРИЯ 5: ИНЖЕНЕРНЫЕ СЕТИ
+  // ==========================================
+  else if (config.category === 'net') {
+    const len = Math.max(5, config.netLength || 25);
+    const isDeep = config.netDeep; // 1.7м vs 1.2м
+    const netType = config.netType || 'both';
 
-    if (netType === 'both' || netType === 'k1' || netType === 'water') {
-      // Канализация и / или водопровод
-      const meterWorkCost = netType === 'both' ? 2520 : netType === 'k1' ? 1530 : 1350;
-      const meterMatCost = netType === 'both' ? 1800 : netType === 'k1' ? 1170 : 850;
+    // 1. Земляные работы (зависят от глубины)
+    addHeader(
+      isDeep
+        ? `1. ЗЕМЛЯНЫЕ РАБОТЫ (ГЛУБИНА 1.7 М — НИЖЕ ПРОМЕРЗАНИЯ ЯО)`
+        : `1. ЗЕМЛЯНЫЕ РАБОТЫ (ГЛУБИНА 1.2 М)`
+    );
 
-      H(`Прокладка наружных сетей: ${netType === 'both' ? 'Канализация + Водопровод' : netType === 'k1' ? 'Канализация К1' : 'Водопровод В1'} (работы)`);
-      alloc(len * meterWorkCost, [
-        ['Геодезическая трассировка траншеи с нивелированием отметок', len, 'м.п.', 0.10],
-        [`Разработка траншеи мини-экскаватором (глубина ${depthStr}) с песчаной подушкой`, len, 'м.п.', 0.42],
-        [`Укладка трубопроводов ${netType === 'both' ? 'К1 Ø110 + ПНД Ø32' : netType === 'k1' ? 'К1 Ø110 с уклоном 2 см/м' : 'ПНД Ø32 питьевой'}`, len, 'м.п.', 0.30],
-        ['Обратная засыпка траншеи грунтом с послойным уплотнением виброплитой', len, 'м.п.', 0.18],
-      ], 'w');
+    const trenchRate = isDeep
+      ? WORK_RATES['trench-excavation-17']
+      : WORK_RATES['trench-excavation-12'];
 
-      H('Материалы трубопроводов (со скидкой 10%)');
-      const pipeItems: [string, number, string, number][] = [];
-      if (netType === 'both' || netType === 'k1') {
-        pipeItems.push(['Труба канализационная безнапорная рыжая ПВХ SN4 Ø110×3.2 мм с раструбом', len, 'м.п.', netType === 'both' ? 0.45 : 0.70]);
-      }
-      if (netType === 'both' || netType === 'water') {
-        pipeItems.push(['Труба напорная питьевая ПНД ПЭ-100 SDR11 Ø32×3.0 мм ГОСТ 18599', len, 'м.п.', netType === 'both' ? 0.25 : 0.70]);
-      }
-      pipeItems.push(['Песок строительный карьерный для защитной подушки и присыпки труб', Math.round(len * 0.18), 'м³', 0.20]);
-      pipeItems.push(['Фасонные элементы, муфты, отводы 45°, сигнальная лента "Осторожно кабель/газ/канализация"', len, 'м.п.', 0.10]);
-      alloc(len * meterMatCost, pipeItems, 'm');
+    addRow(trenchRate, len);
+    addRow(WORK_RATES['trench-sand-cushion-work'], len);
+    addRow(WORK_RATES['trench-backfill-work'], len);
+    addRow(WORK_RATES['geo-survey-net-work'], 1);
 
-      // Колодцы
-      const hasWells = state.netHasWells && (state.netWellsCount > 0);
-      if (hasWells) {
-        const wc = state.netWellsCount;
-        H('Смотровые колодцы (монтажные работы)');
-        alloc(wc * 14400, [
-          ['Разработка котлованов под колодцы и песчаная подготовка', wc, 'шт', 0.30],
-          ['Монтаж ж/б колец КС 10-9 манипулятором с гидроизоляцией швов', wc, 'шт', 0.50],
-          ['Врезка труб через эластичные манжеты in-situ и установка люка', wc, 'шт', 0.20],
-        ], 'w');
+    // Песчаная подушка (материал)
+    const sandVol = Math.round(len * 0.15 * 10) / 10;
+    addRow(MATERIAL_RATES['sand-building-mat'], sandVol);
 
-        H('Комплекты колодцев КС 10-9 (материалы)');
-        alloc(wc * 17100, [
-          ['Кольца стеновые ж/б КС 10-9 ГОСТ 8020-90 с замком', wc * 2, 'шт', 0.45],
-          ['Плита днища ПН-10 и плита перекрытия ПП-10 с отверстием под люк', wc, 'комплекта', 0.30],
-          ['Люк смотровой полимерно-песчаный или чугунный тип Т с замком', wc, 'шт', 0.15],
-          ['Гидропломба безусадочная и битумная гидроизоляция швов', wc, 'комплект', 0.10],
-        ], 'm');
-      }
-    } else if (netType === 'heating') {
-      // ТЕПЛОСЕТЬ: подача + обратка в ППУ
-      H('Теплотрасса отопления и ГВС в ППУ-изоляции (монтажные работы)');
-      alloc(len * 3420, [
-        ['Разработка траншеи под теплотрассу и устройство песчаного основания', len, 'м.п.', 0.30],
-        ['Монтаж стальных предизолированных труб в ППУ-ПЭ оболочке со сваркой стыков', len, 'м.п.', 0.45],
-        ['Монтаж термоусаживаемых стыковых муфт с заливкой ППУ-компонентов', Math.round(len / 6), 'стыков', 0.15],
-        ['Гидравлические испытания давлением 10 атм и подключение кабеля ОДК', len, 'м.п.', 0.10],
-      ], 'w');
+    // 2. Трубопроводы в зависимости от выбранного типа сети
+    if (netType === 'k1' || netType === 'both') {
+      addHeader('2. НАРУЖНАЯ КАНАЛИЗАЦИЯ К1 Ø110');
+      addRow(WORK_RATES['pipe-k1-lay-work'], len);
+      addRow(MATERIAL_RATES['pipe-k1-pvc-mat'], len);
 
-      H('Материалы теплотрассы (предизолированные трубы ППУ и фитинги)');
-      alloc(len * 4320, [
-        ['Трубы стальные бесшовные в ППУ-ПЭ изоляции Ø76/140 с проводниками ОДК (подача+обратка)', len * 2, 'м.п.', 0.72],
-        ['Комплекты изоляции стыков (термоусадочные манжеты, пенопакеты)', Math.round(len / 6), 'комплектов', 0.18],
-        ['Сигнальная лента "Теплосеть" и песок для обратной засыпки', len, 'м.п.', 0.10],
-      ], 'm');
-
-      // Тепловые камеры УТ
-      if (state.netHeatingChambers && state.netHeatingChambersCount > 0) {
-        const hc = state.netHeatingChambersCount;
-        H('Тепловые камеры УТ с запорной арматурой (монтаж)');
-        alloc(hc * 27000, [
-          ['Земляные работы и монтаж сборных ж/б элементов тепловой камеры УТ', hc, 'шт', 0.60],
-          ['Монтаж стальных фланцевых шаровых кранов и спускников в камере', hc, 'комплектов', 0.40],
-        ], 'w');
-
-        H('Материалы тепловых камер и арматуры');
-        alloc(hc * 34200, [
-          ['Сборные ж/б плиты и блоки тепловой камеры УТ с гидроизоляцией', hc, 'комплект', 0.55],
-          ['Стальные шаровые краны Броен Балломакс Ду65 фланцевые с люками', hc * 2, 'шт', 0.45],
-        ], 'm');
-      }
-    } else if (netType === 'storm') {
-      // ДОЖДЕВАЯ КАНАЛИЗАЦИЯ
-      H('Дождевая (ливневая) канализация SN8 (монтажные работы)');
-      alloc(len * 1710, [
-        ['Разработка траншеи с выдержкой проектного уклона к водоприемникам', len, 'м.п.', 0.32],
-        ['Укладка гофрированных полиэтиленовых труб SN8 Ø160/200 мм', len, 'м.п.', 0.42],
-        ['Обратная засыпка гравийным щебнем и грунтом с вибротрамбовкой', len, 'м.п.', 0.26],
-      ], 'w');
-
-      H('Материалы ливневой канализации (трубы SN8 и песок)');
-      alloc(len * 2160, [
-        ['Труба гофрированная двухстенная безнапорная ПНД SN8 Ø160 мм с раструбом', len, 'м.п.', 0.65],
-        ['Соединительные муфты, резиновые уплотнительные кольца, отводы', Math.round(len / 6), 'шт', 0.15],
-        ['Песок и щебень гранитный фракции 5-20 для дренирующей обсыпки', Math.round(len * 0.15), 'м³', 0.20],
-      ], 'm');
-
-      // Дождеприемники
-      if (state.netStormInlets && state.netStormInletsCount > 0) {
-        const ic = state.netStormInletsCount;
-        H('Дождеприемные колодцы с чугунными решетками (монтаж)');
-        alloc(ic * 7650, [
-          ['Установка дождеприемников с бетонированием опорного кольца', ic, 'шт', 0.65],
-          ['Монтаж чугунных водоприемных щелевых решеток класса C250', ic, 'шт', 0.35],
-        ], 'w');
-
-        H('Материалы дождеприемных колодцев');
-        alloc(ic * 9900, [
-          ['Дождеприемный колодец пластиковый усиленный с корзиной пескоуловителя', ic, 'шт', 0.50],
-          ['Чугунная водоприемная решетка щелевая антивандальная с крепежом', ic, 'шт', 0.50],
-        ], 'm');
+      // Смотровые колодцы (только если netHasWells && netWellsCount > 0!)
+      const wellsCount = config.netHasWells ? config.netWellsCount || 2 : 0;
+      if (wellsCount > 0) {
+        addHeader('3. СМОТРОВЫЕ КОЛОДЦЫ КС 10-9');
+        addRow(WORK_RATES['well-ks10-install-work'], wellsCount);
+        addRow(MATERIAL_RATES['well-ks10-rings-mat'], wellsCount);
+        addRow(MATERIAL_RATES['well-pn10-pp10-mat'], wellsCount);
+        addRow(MATERIAL_RATES['well-hatch-t-mat'], wellsCount);
       }
     }
 
-    F('Исполнительная геодезическая съёмка трассы', 'Официальный план с привязкой к границам участка для сдачи в водоканал/архитектуру', 7200, 'w');
+    if (netType === 'water' || netType === 'both') {
+      addHeader(
+        netType === 'both'
+          ? '4. НАРУЖНЫЙ ПИТЬЕВОЙ ВОДОПРОВОД ПНД Ø32'
+          : '2. НАРУЖНЫЙ ПИТЬЕВОЙ ВОДОПРОВОД ПНД Ø32'
+      );
+      addRow(WORK_RATES['pipe-water-lay-work'], len);
+      addRow(MATERIAL_RATES['pipe-water-pnd-mat'], len);
+    }
 
-    const netNameMap: Record<string, string> = {
-      both: 'Канализация К1 + Водопровод В1',
-      k1: 'Канализация бытовая К1',
-      water: 'Водопровод питьевой В1',
-      heating: 'Теплотрасса отопления и ГВС',
-      storm: 'Ливневая (дождевая) канализация',
-    };
+    if (netType === 'heating') {
+      addHeader('2. ДВУХНИТОЧНАЯ ТЕПЛОТРАССА В ППУ-ПЭ ИЗОЛЯЦИИ');
+      addRow(WORK_RATES['heat-pipe-lay-work'], len);
+      addRow(WORK_RATES['heat-test-odk-work'], 1);
+      addRow(MATERIAL_RATES['heat-pipes-ppu-mat'], len);
+      // Стыковые муфты каждые 12 метров
+      const jointsCount = Math.max(2, Math.ceil(len / 12) * 2);
+      addRow(MATERIAL_RATES['heat-joints-ppu-mat'], jointsCount);
 
-    title = 'Инженерные сети';
-    subtitle = `${netNameMap[netType] || 'Сети'} · Трасса ${len} м.п. · Глубина ${depthStr}`;
-  } else if (state.category === 'finish') {
-    // ВНУТРЕННЯЯ ОТДЕЛКА:
-    // Четкая разница между 'base' (White box) и 'full' (Чистовая под ключ)
-    const a = state.finishArea;
-    const isFull = state.finishLevel === 'full';
+      // Тепловые камеры (только если netHeatingChambers && netHeatingChambersCount > 0!)
+      const chambersCount = config.netHeatingChambers
+        ? config.netHeatingChambersCount || 1
+        : 0;
+      if (chambersCount > 0) {
+        addHeader('3. ТЕПЛОВЫЕ КАМЕРЫ УТ С ЗАПОРНОЙ АРМАТУРОЙ');
+        addRow(WORK_RATES['heat-chamber-install-work'], chambersCount);
+        addRow(MATERIAL_RATES['heat-chamber-ut-mat'], chambersCount);
+      }
+    }
+
+    if (netType === 'storm') {
+      addHeader('2. ЛИВНЕВАЯ КАНАЛИЗАЦИЯ SN8 Ø160');
+      addRow(WORK_RATES['storm-pipe-lay-work'], len);
+      addRow(MATERIAL_RATES['storm-pipe-sn8-mat'], len);
+
+      // Дождеприемники (только если netStormInlets && netStormInletsCount > 0!)
+      const inletsCount = config.netStormInlets
+        ? config.netStormInletsCount || 2
+        : 0;
+      if (inletsCount > 0) {
+        addHeader('3. ДОЖДЕПРИЕМНИКИ С ЧУГУННЫМИ РЕШЕТКАМИ С250');
+        addRow(WORK_RATES['storm-inlet-install-work'], inletsCount);
+        addRow(MATERIAL_RATES['storm-inlet-box-mat'], inletsCount);
+        addRow(MATERIAL_RATES['storm-iron-grate-mat'], inletsCount);
+      }
+    }
+  }
+
+  // ==========================================
+  // КАТЕГОРИЯ 6: ВНУТРЕННЯЯ ОТДЕЛКА
+  // ==========================================
+  else if (config.category === 'finish') {
+    const area = Math.max(15, config.finishArea || 50);
+    const isFull = config.finishLevel === 'full';
+
+    // Оценка площади стен по полу: ~ 2.8 м² стены на 1 м² пола
+    const wallArea = Math.round(area * 2.8);
+
+    addHeader('1. СТЕНЫ: ПОДГОТОВИТЕЛЬНЫЕ И ВЫРАВНИВАЮЩИЕ РАБОТЫ');
+    addRow(WORK_RATES['finish-gkl-walls-work'], wallArea);
+    addRow(WORK_RATES['finish-putty-work'], wallArea);
+    addRow(MATERIAL_RATES['finish-gklv-mat'], wallArea);
+    addRow(MATERIAL_RATES['finish-putty-mat'], wallArea);
 
     if (isFull) {
-      // ЧИСТОВАЯ ПОД КЛЮЧ
-      H('Чистовые отделочные работы под ключ (со скидкой 10%)');
-      alloc(a * 5850, [
-        ['Монтаж профильной подсистемы и обшивка влагостойким ГСП / ГКЛ', a, 'м²', 0.20],
-        ['Шпаклевание стен с армирующей стеклосеткой и шлифовка под покраску', a, 'м²', 0.25],
-        ['Финишная покраска стен краской Tikkurila в 2 слоя / декоративные рейки', a, 'м²', 0.35],
-        ['Установка межкомнатных дверей, порталов, наличников и фурнитуры', Math.max(2, Math.round(a / 25)), 'шт', 0.20],
-      ], 'w');
-
-      H('Материалы чистовой отделки под ключ');
-      alloc(a * 3150, [
-        ['Краска интерьерная стойкая к мытью Tikkurila / Flügger', Math.round(a * 0.25), 'л', 0.35],
-        ['Декоративные стеновые рейки из натурального дуба / ясеня', Math.round(a * 0.8), 'м.п.', 0.25],
-        ['Шпаклевка финишная Danogips SuperFinish и грунтовка глубокого проникновения', Math.round(a * 0.4), 'ведер', 0.15],
-        ['Межкомнатные двери экошпон с магнитными замками и петлями', Math.max(2, Math.round(a / 25)), 'комплектов', 0.25],
-      ], 'm');
-    } else {
-      // БАЗОВАЯ ПРЕДЧИСТОВАЯ (WHITE BOX)
-      // ВНИМАНИЕ: СТРОГО НЕТ чистовой покраски, НЕТ реек, НЕТ межкомнатных дверей!
-      H('Базовые подготовительные работы (White Box со скидкой 10%)');
-      alloc(a * 3240, [
-        ['Монтаж профильной подсистемы Knauf с виброизоляционной лентой', a, 'м²', 0.30],
-        ['Обшивка стен влагостойким гипсокартоном Knauf 12.5 мм в 1 слой', a, 'м²', 0.35],
-        ['Базовое шпаклевание стыков и плоскости под обои с грунтовкой', a, 'м²', 0.35],
-      ], 'w');
-
-      H('Материалы базовой подготовки');
-      alloc(a * 1620, [
-        ['Влагостойкий гипсокартон ГКЛВ Knauf 12.5×1200×2500 мм', Math.ceil(a * 0.42), 'листов', 0.50],
-        ['Профили стоечные ПС и направляющие ПН Knauf 0.6 мм', Math.round(a * 2.2), 'м.п.', 0.25],
-        ['Шпаклевка Knauf Fugen, серпянка, грунтовка Ceresit CT 17', a, 'м²', 0.25],
-      ], 'm');
+      addHeader('2. ФИНИШНАЯ МАЛЯРНАЯ ОТДЕЛКА СТЕН');
+      addRow(WORK_RATES['finish-paint-work'], wallArea);
+      addRow(MATERIAL_RATES['finish-paint-mat'], wallArea);
     }
 
-    // Чистовой пол
-    if (state.finishFloor) {
-      H('Монтаж напольного покрытия (работы)');
-      alloc(a * 675, [
-        ['Самовыравнивающаяся тонкослойная стяжка пола', a, 'м²', 0.45],
-        ['Укладка демпферной подложки и кварцвинила / ламината 33 класса', a, 'м²', 0.55],
-      ], 'w');
-
-      H('Материалы напольного покрытия');
-      alloc(a * 1485, [
-        ['Замковый SPC кварцвинил 43 класса / ламинат 33 класса (Германия/РФ)', Math.ceil(a * 1.08), 'м²', 0.72],
-        ['Сухая смесь самонивелирующегося наливного пола Weber.Vetonit', Math.round(a * 0.6), 'мешков', 0.18],
-        ['Плинтусы напольные с мягким краем и кабель-каналом + фурнитура', Math.round(Math.sqrt(a) * 4), 'м.п.', 0.10],
-      ], 'm');
+    // 3. Чистовой пол (только если finishFloor === true!)
+    if (config.finishFloor) {
+      addHeader('3. УСТРОЙСТВО ПОЛОВ И НАСТИЛ КВАРЦВИНИЛА SPC');
+      addRow(WORK_RATES['finish-floor-screed-work'], area);
+      addRow(WORK_RATES['finish-floor-spc-work'], area);
+      addRow(MATERIAL_RATES['finish-screed-mat'], area);
+      addRow(MATERIAL_RATES['finish-spc-mat'], area);
     }
 
-    // Теплый пол
-    if (state.finishWarm) {
-      H('Система водяного / кабельного теплого пола (работы)');
-      alloc(a * 765, [
-        ['Укладка теплоизоляционных матов с фиксаторами для труб', a, 'м²', 0.30],
-        ['Раскладка петель трубы PEX-a шагом 150 мм с опрессовкой давлением 6 атм', a, 'м²', 0.45],
-        ['Установка и балансировка коллекторного шкафа с расходомерами', 1, 'шкаф', 0.25],
-      ], 'w');
+    // 4. Теплый пол (только если finishWarm === true!)
+    if (config.finishWarm) {
+      addHeader('4. ВОДЯНОЙ ТЕПЛЫЙ ПОЛ PEX-A С КОЛЛЕКТОРОМ');
+      addRow(WORK_RATES['finish-warm-floor-work'], area);
+      addRow(WORK_RATES['finish-warm-cabinet-work'], 1);
 
-      H('Материалы теплого пола (трубы PEX-a и коллектор)');
-      alloc(a * 1125, [
-        ['Труба из сшитого полиэтилена PEX-a 16×2.0 с кислородным барьером EVOH', Math.round(a * 6.5), 'м.п.', 0.48],
-        ['Теплоизоляционные маты пенополистирольные с бобышками 20 мм', a, 'м²', 0.24],
-        ['Коллекторный блок Valtec из нержавеющей стали с расходомерами и шкафом', 1, 'комплект', 0.28],
-      ], 'm');
+      // Расход трубы: ~6.5 м.п. на 1 м² пола
+      addRow(MATERIAL_RATES['finish-warm-pipe-mat'], Math.round(area * 6.5));
+      addRow(MATERIAL_RATES['finish-warm-mats-mat'], area);
+      addRow(MATERIAL_RATES['finish-warm-collector-mat'], 1);
     }
 
-    // Электрика
-    if (state.finishElectric) {
-      H('Электромонтажные работы (разводка и щит)');
-      alloc(a * 810, [
-        ['Прокладка кабельных линий в негорючей ПВХ-гофре по потолку и стенам', Math.round(a * 3.5), 'м.п.', 0.45],
-        ['Высверливание отверстий и монтаж подрозетников Schneider', Math.max(8, Math.round(a * 0.6)), 'точек', 0.25],
-        ['Сборка и коммутация распределительного щита с УЗО и дифавтоматами', 1, 'щит', 0.30],
-      ], 'w');
+    // 5. Электромонтажные работы (только если finishElectric === true!)
+    if (config.finishElectric) {
+      addHeader('5. ЭЛЕКТРОМОНТАЖНЫЕ РАБОТЫ И ЩИТОВОЕ ОБОРУДОВАНИЕ');
+      const cableLen = Math.round(area * 4.5);
+      const pointsCount = Math.max(8, Math.round(area * 0.7));
 
-      H('Материалы электрики ГОСТ (кабель ВВГнг-LS и автоматика)');
-      alloc(a * 990, [
-        ['Кабель силовой медный ВВГнг(А)-LS 3×1.5 и 3×2.5 ГОСТ Конкорд', Math.round(a * 3.5), 'м.п.', 0.50],
-        ['Встраиваемый щит ABB / DEKraft с автоматическими выключателями и УЗО', 1, 'комплект', 0.32],
-        ['Гофрированная труба ПВХ с протяжкой, подрозетники, клеммы Wago', 1, 'комплект', 0.18],
-      ], 'm');
+      addRow(WORK_RATES['finish-electric-wiring-work'], cableLen);
+      addRow(WORK_RATES['finish-electric-box-work'], pointsCount);
+      addRow(WORK_RATES['finish-electric-panel-work'], 1);
+
+      addRow(MATERIAL_RATES['finish-cable-vvg-mat'], cableLen);
+      addRow(MATERIAL_RATES['finish-boxes-mat'], pointsCount);
+      addRow(MATERIAL_RATES['finish-panel-kit-mat'], 1);
     }
-
-    title = 'Внутренняя отделка помещений';
-    subtitle = `Площадь ${a} м² · ${isFull ? 'Чистовая отделка под ключ' : 'Базовая подготовка (White box)'}`;
   }
+
+  // Строгое соблюдение баланса сметы: totalCost = workCost + materialCost
+  const totalCost = workSum + matSum;
+
+  const titlesMap: Record<string, { title: string; subtitle: string }> = {
+    house: {
+      title: 'Смета на строительство модульного/каркасного дома',
+      subtitle: `Площадь ${config.houseArea || 48} м² • ${
+        config.houseKit === 'turnkey' ? 'Комплектация «Под ключ»' : 'Силовая коробка (каркас)'
+      } • ${config.houseMaterial === 'metal' ? 'Металлокаркас' : 'Сухая строганая древесина'}`,
+    },
+    pile: {
+      title: 'Смета на свайный фундамент',
+      subtitle: `${config.pileCount || 20} винтовых свай Ø${config.pileDia || '89'} мм • Погружение ниже глубины промерзания ЯО`,
+    },
+    deck: {
+      title: 'Смета на террасу из древесно-полимерного композита',
+      subtitle: `Площадь ${config.deckArea || 24} м² • ${
+        config.deckLayout === 'diag' ? 'Диагональная укладка 45°' : 'Прямая укладка'
+      } • Полнотелый ДПК`,
+    },
+    pool: {
+      title: 'Смета на композитный бассейн «под ключ»',
+      subtitle: `Чаша 5.2 × 3.2 × 1.45 м • ${
+        config.poolPavilion === 'slide'
+          ? 'Раздвижной павильон'
+          : config.poolPavilion === 'poly'
+          ? 'Арочный навес'
+          : 'Без павильона'
+      }`,
+    },
+    net: {
+      title: 'Смета на наружные инженерные коммуникации',
+      subtitle: `Трасса ${config.netLength || 25} м • Глубина ${
+        config.netDeep ? '1.7 м (ниже промерзания)' : '1.2 м'
+      }`,
+    },
+    finish: {
+      title: 'Смета на внутреннюю отделку помещений',
+      subtitle: `Площадь ${config.finishArea || 50} м² • ${
+        config.finishLevel === 'full' ? 'Чистовая отделка под ключ' : 'White Box (предчистовая)'
+      }`,
+    },
+  };
+
+  const { title, subtitle } = titlesMap[config.category] || {
+    title: 'Индивидуальная строительная смета',
+    subtitle: 'Прямой расчет по региональным расценкам Ярославской области',
+  };
 
   return {
     title,
     subtitle,
-    totalCost: sum,
+    totalCost,
     workCost: workSum,
     materialCost: matSum,
     rows,
-  };
-}
-
-// Mini-calculators for the Engineering Center
-export function calcConcrete({
-  length,
-  width,
-  height,
-  grade = 'M300',
-}: {
-  length: number;
-  width: number;
-  height: number;
-  grade?: string;
-}) {
-  const volume = length * width * height;
-  const cementBags = Math.ceil((volume * 350) / 50); // 50kg bags
-  const sandTons = Number(((volume * 0.75)).toFixed(1));
-  const crushedStoneTons = Number(((volume * 1.2)).toFixed(1));
-  const rebarMeters = Math.round(volume * 65);
-
-  return {
-    volume: Number(volume.toFixed(2)),
-    cementBags,
-    sandTons,
-    crushedStoneTons,
-    rebarMeters,
-    recommendedGrade: grade,
-  };
-}
-
-export function calcPileField({
-  houseWidth,
-  houseLength,
-  floors = 1,
-  soil = 'loam',
-}: {
-  houseWidth: number;
-  houseLength: number;
-  floors?: number;
-  soil?: string;
-}) {
-  const area = houseWidth * houseLength;
-  const perimeter = (houseWidth + houseLength) * 2;
-  const step = 2.0;
-  const countX = Math.ceil(houseWidth / step) + 1;
-  const countY = Math.ceil(houseLength / step) + 1;
-  const basePiles = countX * countY;
-  const totalPiles = Math.max(9, basePiles);
-
-  const dia = (floors > 1 || area > 80) ? '108 мм' : '89 мм';
-  const minLength = '2.5 – 3.0 м (ниже глубины промерзания 1.45 м)';
-
-  return {
-    totalPiles,
-    perimeter,
-    recommendedDia: dia,
-    minLength,
-    step: `${step} м`,
-    channelBeamMeters: perimeter + (houseLength * (countX > 2 ? 1 : 0)),
-  };
-}
-
-export function calcTerraceDPK({
-  length,
-  width,
-  boardWidth = 0.16,
-  boardLength = 4.0,
-}: {
-  length: number;
-  width: number;
-  boardWidth?: number;
-  boardLength?: number;
-}) {
-  const area = length * width;
-  const boardArea = boardWidth * boardLength;
-  const boardsCount = Math.ceil((area * 1.07) / boardArea);
-  const lagsMeters = Math.ceil((area / 0.35) * 1.05);
-  const clipsCount = Math.ceil(area * 22);
-  const geotextileM2 = Math.ceil(area * 1.15);
-  const crushedStoneM3 = Number((area * 0.08).toFixed(1));
-
-  return {
-    area: Number(area.toFixed(1)),
-    boardsCount,
-    lagsMeters,
-    clipsCount,
-    geotextileM2,
-    crushedStoneM3,
-  };
-}
-
-export function calcTrench({
-  length,
-  depth = 1.6,
-  width = 0.5,
-  pipeType = 'k1',
-}: {
-  length: number;
-  depth?: number;
-  width?: number;
-  pipeType?: string;
-}) {
-  const excavationVolume = Number((length * depth * width).toFixed(1));
-  const sandBeddingM3 = Number((length * 0.15 * width).toFixed(1));
-  const slopeCmPerM = 2.0;
-  const totalDropCm = Math.round(length * slopeCmPerM);
-
-  return {
-    excavationVolume,
-    sandBeddingM3,
-    slopeCmPerM,
-    totalDropCm,
-    frostDepthSafe: depth >= 1.5,
   };
 }

@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { ConfiguratorState, ServiceCategory } from '../types';
+import { ConfiguratorState, ServiceCategory, EstimateResult } from '../types';
 import { calculateEstimate, formatRuble } from '../lib/calcEngine';
 import { ObjectViewer3D, Dynamic3DOptions } from './ObjectViewer3D';
+import { TechnicalScheme2D } from './TechnicalScheme2D';
+import { SliderWithTicks } from './SliderWithTicks';
 import { exportEstimateExcel, downloadCommercialProposalPdf } from '../lib/exportEstimate';
 import {
   Calculator,
@@ -14,11 +16,19 @@ import {
   Printer,
   Info,
   ShieldAlert,
+  Box,
+  Compass,
 } from 'lucide-react';
 
 interface InteractiveConfiguratorProps {
   initialCategory?: ServiceCategory;
-  onOpenEstimateModal: (calculatedTitle: string, totalCost: number, summaryText: string) => void;
+  onOpenEstimateModal: (
+    calculatedTitle: string,
+    totalCost: number,
+    summaryText: string,
+    estimate?: EstimateResult,
+    config?: ConfiguratorState
+  ) => void;
 }
 
 export const InteractiveConfigurator: React.FC<InteractiveConfiguratorProps> = ({
@@ -80,6 +90,7 @@ export const InteractiveConfigurator: React.FC<InteractiveConfiguratorProps> = (
 
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [breakdownFilter, setBreakdownFilter] = useState<'all' | 'w' | 'm'>('all');
+  const [visualMode, setVisualMode] = useState<'3d' | '2d'>('3d');
 
   const estimate = useMemo(() => calculateEstimate(config), [config]);
 
@@ -119,6 +130,7 @@ export const InteractiveConfigurator: React.FC<InteractiveConfiguratorProps> = (
         d,
         railing: config.deckRail,
         hasSteps: (config.deckSteps || 0) > 0,
+        stepsCount: config.deckSteps ?? 2,
         hasPiles: config.deckPiles,
         deckLayout: config.deckLayout,
       };
@@ -137,6 +149,7 @@ export const InteractiveConfigurator: React.FC<InteractiveConfiguratorProps> = (
       return {
         category: 'net',
         networkType: config.netType,
+        depth: config.netDeep ? 1.7 : 1.2,
         hasWells: config.netHasWells,
         wellsCount: config.netWellsCount,
         hasHeating: config.netHeating,
@@ -174,7 +187,7 @@ export const InteractiveConfigurator: React.FC<InteractiveConfiguratorProps> = (
 
   const handleGetEstimate = () => {
     const summary = `${estimate.title} (${estimate.subtitle}): ${formatRuble(estimate.totalCost)}`;
-    onOpenEstimateModal(estimate.title, estimate.totalCost, summary);
+    onOpenEstimateModal(estimate.title, estimate.totalCost, summary, estimate, config);
   };
 
   return (
@@ -231,21 +244,23 @@ export const InteractiveConfigurator: React.FC<InteractiveConfiguratorProps> = (
                       {config.houseArea} м²
                     </span>
                   </div>
-                  <input
-                    type="range"
+                  <SliderWithTicks
+                    id="slider-house-area"
                     min={18}
                     max={250}
                     step={2}
                     value={config.houseArea}
-                    onChange={(e) => setConfig({ ...config, houseArea: Number(e.target.value) })}
-                    className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                    onChange={(val) => setConfig({ ...config, houseArea: val })}
+                    unit="м²"
+                    ticks={[
+                      { val: 18, label: '18 м²' },
+                      { val: 54, label: '54 м²' },
+                      { val: 100, label: '100 м²' },
+                      { val: 150, label: '150 м²' },
+                      { val: 200, label: '200 м²' },
+                      { val: 250, label: '250 м²' },
+                    ]}
                   />
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mt-1">
-                    <span>18 м² (пристройка)</span>
-                    <span>54 м²</span>
-                    <span>120 м²</span>
-                    <span>250 м²</span>
-                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -428,21 +443,23 @@ export const InteractiveConfigurator: React.FC<InteractiveConfiguratorProps> = (
                       {config.deckArea} м²
                     </span>
                   </div>
-                  <input
-                    type="range"
+                  <SliderWithTicks
+                    id="slider-deck-area"
                     min={10}
                     max={200}
                     step={2}
                     value={config.deckArea}
-                    onChange={(e) => setConfig({ ...config, deckArea: Number(e.target.value) })}
-                    className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                    onChange={(val) => setConfig({ ...config, deckArea: val })}
+                    unit="м²"
+                    ticks={[
+                      { val: 10, label: '10 м²' },
+                      { val: 40, label: '40 м²' },
+                      { val: 80, label: '80 м²' },
+                      { val: 120, label: '120 м²' },
+                      { val: 160, label: '160 м²' },
+                      { val: 200, label: '200 м²' },
+                    ]}
                   />
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mt-1">
-                    <span>10 м²</span>
-                    <span>42 м²</span>
-                    <span>100 м²</span>
-                    <span>200 м²</span>
-                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -517,21 +534,23 @@ export const InteractiveConfigurator: React.FC<InteractiveConfiguratorProps> = (
                       {config.pileCount} шт
                     </span>
                   </div>
-                  <input
-                    type="range"
+                  <SliderWithTicks
+                    id="slider-pile-count"
                     min={6}
                     max={64}
                     step={2}
                     value={config.pileCount}
-                    onChange={(e) => setConfig({ ...config, pileCount: Number(e.target.value) })}
-                    className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                    onChange={(val) => setConfig({ ...config, pileCount: val })}
+                    unit="шт"
+                    ticks={[
+                      { val: 6, label: '6 шт' },
+                      { val: 16, label: '16 шт' },
+                      { val: 28, label: '28 шт' },
+                      { val: 40, label: '40 шт' },
+                      { val: 52, label: '52 шт' },
+                      { val: 64, label: '64 шт' },
+                    ]}
                   />
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mt-1">
-                    <span>6 шт (беседка)</span>
-                    <span>16 шт (дом 6×8)</span>
-                    <span>32 шт</span>
-                    <span>64 шт</span>
-                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -602,21 +621,23 @@ export const InteractiveConfigurator: React.FC<InteractiveConfiguratorProps> = (
                       {config.netLength} м.п.
                     </span>
                   </div>
-                  <input
-                    type="range"
+                  <SliderWithTicks
+                    id="slider-net-length"
                     min={10}
                     max={150}
                     step={5}
                     value={config.netLength}
-                    onChange={(e) => setConfig({ ...config, netLength: Number(e.target.value) })}
-                    className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                    onChange={(val) => setConfig({ ...config, netLength: val })}
+                    unit="м"
+                    ticks={[
+                      { val: 10, label: '10 м' },
+                      { val: 30, label: '30 м' },
+                      { val: 60, label: '60 м' },
+                      { val: 90, label: '90 м' },
+                      { val: 120, label: '120 м' },
+                      { val: 150, label: '150 м' },
+                    ]}
                   />
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mt-1">
-                    <span>10 м</span>
-                    <span>45 м</span>
-                    <span>90 м</span>
-                    <span>150 м</span>
-                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -764,14 +785,20 @@ export const InteractiveConfigurator: React.FC<InteractiveConfiguratorProps> = (
                             <span className="text-slate-400">Длина теплотрассы:</span>
                             <span className="text-blue-400 font-bold">{config.netHeatingLength} м.п.</span>
                           </div>
-                          <input
-                            type="range"
+                          <SliderWithTicks
                             min={10}
                             max={100}
                             step={5}
                             value={config.netHeatingLength}
-                            onChange={(e) => setConfig({ ...config, netHeatingLength: Number(e.target.value) })}
-                            className="w-full h-1.5 bg-slate-800 rounded appearance-none cursor-pointer accent-blue-500"
+                            onChange={(val) => setConfig({ ...config, netHeatingLength: val })}
+                            unit="м"
+                            ticks={[
+                              { val: 10, label: '10 м' },
+                              { val: 30, label: '30 м' },
+                              { val: 50, label: '50 м' },
+                              { val: 75, label: '75 м' },
+                              { val: 100, label: '100 м' },
+                            ]}
                           />
                           <div className="flex items-center justify-between pt-1">
                             <label className="flex items-center gap-2 text-xs font-mono text-slate-300 cursor-pointer">
@@ -820,14 +847,20 @@ export const InteractiveConfigurator: React.FC<InteractiveConfiguratorProps> = (
                             <span className="text-slate-400">Длина ливневки:</span>
                             <span className="text-blue-400 font-bold">{config.netStormLength} м.п.</span>
                           </div>
-                          <input
-                            type="range"
+                          <SliderWithTicks
                             min={10}
                             max={100}
                             step={5}
                             value={config.netStormLength}
-                            onChange={(e) => setConfig({ ...config, netStormLength: Number(e.target.value) })}
-                            className="w-full h-1.5 bg-slate-800 rounded appearance-none cursor-pointer accent-blue-500"
+                            onChange={(val) => setConfig({ ...config, netStormLength: val })}
+                            unit="м"
+                            ticks={[
+                              { val: 10, label: '10 м' },
+                              { val: 30, label: '30 м' },
+                              { val: 50, label: '50 м' },
+                              { val: 75, label: '75 м' },
+                              { val: 100, label: '100 м' },
+                            ]}
                           />
                           <div className="flex items-center justify-between pt-1">
                             <label className="flex items-center gap-2 text-xs font-mono text-slate-300 cursor-pointer">
@@ -883,14 +916,22 @@ export const InteractiveConfigurator: React.FC<InteractiveConfiguratorProps> = (
                       {config.finishArea} м²
                     </span>
                   </div>
-                  <input
-                    type="range"
+                  <SliderWithTicks
+                    id="slider-finish-area"
                     min={15}
                     max={200}
                     step={5}
                     value={config.finishArea}
-                    onChange={(e) => setConfig({ ...config, finishArea: Number(e.target.value) })}
-                    className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                    onChange={(val) => setConfig({ ...config, finishArea: val })}
+                    unit="м²"
+                    ticks={[
+                      { val: 15, label: '15 м²' },
+                      { val: 50, label: '50 м²' },
+                      { val: 90, label: '90 м²' },
+                      { val: 130, label: '130 м²' },
+                      { val: 165, label: '165 м²' },
+                      { val: 200, label: '200 м²' },
+                    ]}
                   />
                 </div>
 
@@ -961,15 +1002,65 @@ export const InteractiveConfigurator: React.FC<InteractiveConfiguratorProps> = (
 
           {/* Right Column: 3D Visualization & Calculation Breakdown (6 cols) */}
           <div className="lg:col-span-6 space-y-6">
-            {/* Real-time 3D Object Model */}
-            <div className="rounded-xl overflow-hidden border border-slate-800">
-              <ObjectViewer3D
-                category={config.category}
-                options={viewerOptions}
-                showHotspots={false}
-                interactive={true}
-                className="h-[340px] sm:h-[380px] lg:h-[420px]"
-              />
+            {/* Real-time 3D Object Model or 2D Technical Scheme */}
+            <div className="space-y-2">
+              {/* Mode Toggle Bar */}
+              <div className="flex items-center justify-between bg-slate-900/90 border border-slate-800 rounded-lg px-3 py-1.5">
+                <div className="flex items-center gap-2 text-xs font-mono text-slate-300">
+                  {visualMode === '3d' ? (
+                    <Box className="w-4 h-4 text-blue-400" />
+                  ) : (
+                    <Compass className="w-4 h-4 text-emerald-400" />
+                  )}
+                  <span className="font-bold">
+                    {visualMode === '3d' ? '3D Интерактивная модель' : 'Техническая 2D схема (ЕСКД)'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded border border-slate-800 text-[11px] font-mono">
+                  <button
+                    type="button"
+                    onClick={() => setVisualMode('3d')}
+                    className={`px-3 py-1 rounded transition-colors flex items-center gap-1.5 ${
+                      visualMode === '3d'
+                        ? 'bg-blue-600 text-white font-bold'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Box className="w-3.5 h-3.5" />
+                    <span>3D Вид</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVisualMode('2d')}
+                    className={`px-3 py-1 rounded transition-colors flex items-center gap-1.5 ${
+                      visualMode === '2d'
+                        ? 'bg-blue-600 text-white font-bold'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Compass className="w-3.5 h-3.5" />
+                    <span>2D Схема</span>
+                  </button>
+                </div>
+              </div>
+
+              {visualMode === '3d' ? (
+                <div className="rounded-xl overflow-hidden border border-slate-800">
+                  <ObjectViewer3D
+                    category={config.category}
+                    options={viewerOptions}
+                    showHotspots={false}
+                    interactive={true}
+                    className="h-[340px] sm:h-[380px] lg:h-[420px]"
+                  />
+                </div>
+              ) : (
+                <TechnicalScheme2D
+                  config={config}
+                  options={viewerOptions}
+                  className="h-[340px] sm:h-[380px] lg:h-[420px]"
+                />
+              )}
             </div>
 
             {/* Preliminary Estimate Box */}
@@ -1101,13 +1192,26 @@ export const InteractiveConfigurator: React.FC<InteractiveConfiguratorProps> = (
                             );
                           }
                           return (
-                            <div key={i} className="py-1.5 flex justify-between items-start gap-2">
-                              <div>
-                                <div className="text-slate-200">{row.name}</div>
-                                <div className="text-[10px] text-slate-400">{row.note}</div>
+                            <div key={i} className="py-2 flex justify-between items-start gap-2">
+                              <div className="space-y-0.5">
+                                <div className="text-slate-200 font-medium">{row.name}</div>
+                                <div className="text-[10px] text-slate-400 font-mono">{row.note}</div>
+                                {row.source && (
+                                  <div className="text-[9px] text-emerald-400 font-mono flex items-center gap-1">
+                                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                    <span>Источник ЯО: {row.source}</span>
+                                  </div>
+                                )}
                               </div>
-                              <div className="text-right shrink-0 font-semibold text-slate-300">
-                                {formatRuble(row.cost)}
+                              <div className="text-right shrink-0">
+                                <div className="font-bold text-white font-mono">
+                                  {formatRuble(row.cost)}
+                                </div>
+                                {row.marketPrice && row.unitPrice && row.volume && (
+                                  <div className="text-[9px] text-slate-400 font-mono line-through">
+                                    рынок {formatRuble(Math.round(row.marketPrice * row.volume))}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           );

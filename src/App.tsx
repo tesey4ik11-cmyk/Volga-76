@@ -3,7 +3,6 @@ import { Header } from './components/Header';
 import { Hero } from './components/Hero';
 import { SequenceConcept } from './components/SequenceConcept';
 import { InteractiveConfigurator } from './components/InteractiveConfigurator';
-import { LiveConstruction } from './components/LiveConstruction';
 import { ProjectPassports } from './components/ProjectPassports';
 import { EngineeringCenter } from './components/EngineeringCenter';
 import { RegionMap } from './components/RegionMap';
@@ -11,19 +10,29 @@ import { PricingTransparency } from './components/PricingTransparency';
 import { ReviewsSection } from './components/ReviewsSection';
 import { Footer } from './components/Footer';
 import { LeadFormModal } from './components/LeadFormModal';
-import { ServiceCategory, ProjectPassport } from './types';
+import { ServiceCategory, ProjectPassport, EstimateResult, ConfiguratorState } from './types';
 
 export function App() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalTitle, setModalTitle] = useState('Строительный объект');
   const [modalCost, setModalCost] = useState(0);
   const [modalSummary, setModalSummary] = useState('');
+  const [modalEstimate, setModalEstimate] = useState<EstimateResult | undefined>(undefined);
+  const [modalConfig, setModalConfig] = useState<ConfiguratorState | undefined>(undefined);
   const [selectedCategory, setSelectedCategory] = useState<ServiceCategory>('house');
 
-  const handleOpenEstimateModal = (title: string, cost: number, summary: string) => {
+  const handleOpenEstimateModal = (
+    title: string,
+    cost: number,
+    summary: string,
+    estimate?: EstimateResult,
+    config?: ConfiguratorState
+  ) => {
     setModalTitle(title);
     setModalCost(cost);
     setModalSummary(summary);
+    setModalEstimate(estimate);
+    setModalConfig(config);
     setModalOpen(true);
   };
 
@@ -31,6 +40,8 @@ export function App() {
     setModalTitle('Расчёт объекта под ключ');
     setModalCost(0);
     setModalSummary('Индивидуальный расчет по нормам СП 20 для участка в Ярославской области');
+    setModalEstimate(undefined);
+    setModalConfig(undefined);
     setModalOpen(true);
   };
 
@@ -38,20 +49,17 @@ export function App() {
     setModalTitle(`Аналог объекта ${passport.code}`);
     setModalCost(0);
     setModalSummary(`${passport.title} (${passport.type}, ${passport.area})`);
+    setModalEstimate(undefined);
+    setModalConfig(undefined);
     setModalOpen(true);
   };
 
   const handleSelectCityForConsult = (cityName: string) => {
     setModalTitle(`Строительство в г. ${cityName}`);
     setModalCost(0);
-    setModalSummary(`Бесплатный выезд инженера на участок в ${cityName} с лазерным нивелиром`);
-    setModalOpen(true);
-  };
-
-  const handleSelectProjectForCalc = (projectName: string) => {
-    setModalTitle(`Расчёт по объекту: ${projectName}`);
-    setModalCost(0);
-    setModalSummary(`Комплекс аналогичный текущей живой стройке: ${projectName}`);
+    setModalSummary(`Бесплатный выезд инженера на участок в ${cityName}`);
+    setModalEstimate(undefined);
+    setModalConfig(undefined);
     setModalOpen(true);
   };
 
@@ -75,10 +83,7 @@ export function App() {
         onOpenEstimateModal={handleOpenEstimateModal}
       />
 
-      {/* 5. Live Construction: Real field updates, progress %, stages */}
-      <LiveConstruction onSelectProjectForCalc={handleSelectProjectForCalc} />
-
-      {/* 6. Engineering Passports instead of generic portfolio */}
+      {/* 5. Engineering Passports instead of generic portfolio */}
       <ProjectPassports onSelectPassportForEstimate={handleSelectPassportForEstimate} />
 
       {/* 7. Engineering Center: Interactive blueprint schemas */}
@@ -103,6 +108,8 @@ export function App() {
         initialTitle={modalTitle}
         initialTotalCost={modalCost}
         summaryText={modalSummary}
+        estimate={modalEstimate}
+        config={modalConfig}
       />
     </div>
   );

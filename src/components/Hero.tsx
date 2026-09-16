@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ObjectViewer3D } from './ObjectViewer3D';
-import { ServiceCategory } from '../types';
+import { TechnicalScheme2D } from './TechnicalScheme2D';
+import { ServiceCategory, ConfiguratorState } from '../types';
 import {
   Compass,
   CheckCircle2,
@@ -19,6 +20,7 @@ interface HeroProps {
 
 export const Hero: React.FC<HeroProps> = ({ onOpenCalcModal, onSelectCategory }) => {
   const [activeTab, setActiveTab] = useState<ServiceCategory>('house');
+  const [viewMode, setViewMode] = useState<'3d' | '2d'>('3d');
 
   const categories: { id: ServiceCategory; label: string; sub: string }[] = [
     { id: 'house', label: 'ДОМ И ЗДАНИЕ', sub: 'Каркас, сэндвич, кровля' },
@@ -27,6 +29,59 @@ export const Hero: React.FC<HeroProps> = ({ onOpenCalcModal, onSelectCategory })
     { id: 'pile', label: 'СВАЙНОЕ ПОЛЕ', sub: 'Винтовые сваи Ø89–108' },
     { id: 'net', label: 'ИНЖЕНЕРНЫЕ СЕТИ', sub: 'Канализация и вода 1.6м' },
   ];
+
+  const hero2DConfig: ConfiguratorState = {
+    category: activeTab,
+    // House
+    houseArea: 54,
+    houseKit: 'turnkey',
+    houseMaterial: 'wood',
+    houseFund: true,
+    houseCrane: true,
+    houseMatInclude: true,
+
+    // Pool
+    poolPavilion: 'poly',
+    poolPipe: true,
+    poolTech: true,
+    poolDeck: true,
+
+    // Deck
+    deckArea: 32,
+    deckLayout: 'straight',
+    deckSteps: 2,
+    deckPiles: true,
+    deckRail: true,
+
+    // Pile
+    pileCount: 20,
+    pileDia: '108',
+    pileRostverk: true,
+    pileFill: true,
+
+    // Net
+    netLength: 45,
+    netType: 'both',
+    netDeep: true,
+    netWells: 2,
+    netHasWells: true,
+    netWellsCount: 2,
+    netHeating: false,
+    netHeatingLength: 25,
+    netHeatingChambers: true,
+    netHeatingChambersCount: 1,
+    netStorm: false,
+    netStormLength: 30,
+    netStormInlets: true,
+    netStormInletsCount: 2,
+
+    // Finish
+    finishArea: 54,
+    finishLevel: 'full',
+    finishFloor: true,
+    finishWarm: true,
+    finishElectric: true,
+  };
 
   const handleCategorySwitch = (cat: ServiceCategory) => {
     setActiveTab(cat);
@@ -151,13 +206,45 @@ export const Hero: React.FC<HeroProps> = ({ onOpenCalcModal, onSelectCategory })
               <div className="p-2.5 rounded bg-slate-900/40 border border-slate-800">
                 <div className="text-slate-400 text-[10px]">ГЕОГРАФИЯ</div>
                 <div className="text-blue-400 font-bold text-sm mt-0.5">Вся обл. 76</div>
-                <div className="text-slate-400 text-[10px]">Своя спецтехника</div>
+                <div className="text-slate-400 text-[10px]">Выезд по области</div>
               </div>
             </div>
           </div>
 
-          {/* Right Column: Interactive 3D Canvas Stage */}
+          {/* Right Column: Interactive 3D / 2D Canvas Stage */}
           <div className="lg:col-span-6 relative">
+            {/* Top View Mode Switcher */}
+            <div className="flex items-center justify-between pb-2.5 px-1">
+              <div className="flex items-center gap-2 text-xs font-mono text-slate-300">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="font-semibold">Инженерный просмотр объекта:</span>
+              </div>
+              <div className="inline-flex rounded-lg p-0.5 bg-slate-900 border border-slate-800 text-xs font-mono">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('3d')}
+                  className={`px-3 py-1 rounded-md transition-all ${
+                    viewMode === '3d'
+                      ? 'bg-blue-600 text-white font-bold shadow'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  3D Модель
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('2d')}
+                  className={`px-3 py-1 rounded-md transition-all ${
+                    viewMode === '2d'
+                      ? 'bg-blue-600 text-white font-bold shadow'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  2D Чертёж (ЕСКД)
+                </button>
+              </div>
+            </div>
+
             <div className="relative">
               {/* Corner Engineering Framing Markers */}
               <div className="absolute -top-2 -left-2 w-4 h-4 border-t-2 border-l-2 border-blue-500/70 z-20 pointer-events-none" />
@@ -165,19 +252,30 @@ export const Hero: React.FC<HeroProps> = ({ onOpenCalcModal, onSelectCategory })
               <div className="absolute -bottom-2 -left-2 w-4 h-4 border-b-2 border-l-2 border-blue-500/70 z-20 pointer-events-none" />
               <div className="absolute -bottom-2 -right-2 w-4 h-4 border-b-2 border-r-2 border-blue-500/70 z-20 pointer-events-none" />
 
-              <ObjectViewer3D
-                category={activeTab}
-                showHotspots={true}
-                interactive={true}
-                className="h-[360px] sm:h-[440px] lg:h-[520px]"
-              />
+              {viewMode === '3d' ? (
+                <ObjectViewer3D
+                  category={activeTab}
+                  showHotspots={true}
+                  interactive={true}
+                  className="h-[360px] sm:h-[440px] lg:h-[520px]"
+                />
+              ) : (
+                <div className="h-[360px] sm:h-[440px] lg:h-[520px] bg-[#070b14] rounded-2xl border border-slate-800 overflow-hidden flex flex-col relative">
+                  <TechnicalScheme2D
+                    config={hero2DConfig}
+                    className="w-full h-full flex-1"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Quick Annotation Pill */}
             <div className="mt-3 flex items-center justify-between text-xs font-mono text-slate-400 px-1">
               <span className="flex items-center gap-1 text-slate-300">
                 <span className="w-2 h-2 rounded-full bg-blue-500" />
-                Нажимайте на радарные метки для просмотра конструктива
+                {viewMode === '3d'
+                  ? 'Вращайте модель мышью или пальцем, изучайте узлы'
+                  : 'Чертёж по ЕСКД с привязкой осей и шагов конструктива'}
               </span>
               <a href="#configurator" className="text-blue-400 hover:underline">
                 Перейти в конструктор сметы →

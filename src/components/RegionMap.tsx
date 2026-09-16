@@ -27,9 +27,9 @@ export const RegionMap: React.FC<RegionMapProps> = ({ onSelectCityForConsult }) 
           </h2>
 
           <p className="text-slate-300 text-sm sm:text-base leading-relaxed">
-            Своя логистика, мобильные сваекруты и бригады со своим инструментом.
-            Выезжаем на участки по всей области без наценок за отдаленность.
-            Всего в регионе сдано уже <span className="text-white font-bold">{totalProjectsInRegion}+ объектов</span>.
+            Реализация строительных и инженерных проектов по всей Ярославской области.
+            Выезжаем на участки заказчиков с полным комплектом профессионального оборудования.
+            Всего в регионе успешно сдано и эксплуатируется <span className="text-white font-bold">{totalProjectsInRegion} завершённых объектов</span>.
           </p>
         </div>
 

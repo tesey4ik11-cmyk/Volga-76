@@ -44,26 +44,50 @@ if (vgs_limited('leads', $ip, 5, 60)) {
 try {
     $pdo = vgs_db();
     /* Пытаемся записать с расчётом; если колонки calc ещё нет — пишем без неё */
+    $leadId = 0;
     try {
         $st = $pdo->prepare('INSERT INTO leads (name, phone, topic, message, calc, ip) VALUES (?, ?, ?, ?, ?, ?)');
         $st->execute(array($name, $phone, $topic, $msg, $calcTxt, $ip));
+        $leadId = (int)$pdo->lastInsertId();
     } catch (Exception $inner) {
         $st = $pdo->prepare('INSERT INTO leads (name, phone, topic, message, ip) VALUES (?, ?, ?, ?, ?)');
         $st->execute(array($name, $phone, $topic, ($calcTxt ? $msg . "\n\n" . $calcTxt : $msg), $ip));
+        $leadId = (int)$pdo->lastInsertId();
     }
 } catch (Exception $e) {
     vgs_out(array('ok' => false, 'err' => 'db'), 500);
 }
 
-vgs_send_notify($name, $phone, $topic, $msg, $calcTxt);
+// Optionally save uploaded estimate files (Excel / PDF) in data/uploads/
+$savedAttachments = array();
+if (!empty($_FILES)) {
+    $uploadDir = __DIR__ . '/../data/uploads';
+    if (!is_dir($uploadDir)) {
+        @mkdir($uploadDir, 0775, true);
+    }
+    foreach ($_FILES as $k => $f) {
+        if (!empty($f['tmp_name']) && is_uploaded_file($f['tmp_name'])) {
+            $origName = preg_replace('/[^a-zA-Z0-9_\.-]/', '_', $f['name']);
+            $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+            if (in_array($ext, array('xlsx', 'pdf', 'png', 'jpg', 'jpeg', 'dwg'))) {
+                $target = $uploadDir . '/lead_' . $leadId . '_' . time() . '_' . $origName;
+                if (@move_uploaded_file($f['tmp_name'], $target)) {
+                    $savedAttachments[] = $target;
+                }
+            }
+        }
+    }
+}
 
-vgs_out(array('ok' => true));
+vgs_send_notify($name, $phone, $topic, $msg, $calcTxt, $savedAttachments);
+
+vgs_out(array('ok' => true, 'id' => $leadId));
 
 /**
  * Уведомления: email на все адреса из config.php + MAX-бот, если настроен.
  * Способ отправки: SMTP (если заполнен smtp_host в config.php) или PHP mail().
  */
-function vgs_send_notify($name, $phone, $topic, $msg, $calcTxt = '')
+function vgs_send_notify($name, $phone, $topic, $msg, $calcTxt = '', $attachments = array())
 {
     global $VGS_CFG;
 
@@ -89,6 +113,14 @@ function vgs_send_notify($name, $phone, $topic, $msg, $calcTxt = '')
         $body .= '<div style="margin:16px 0;padding:14px 16px;background:#eef4fb;border-left:4px solid #0b6bbf;border-radius:4px">';
         $body .= '<b style="color:#0b6bbf">🧮 Клиент прислал расчёт из калькулятора:</b><br>';
         $body .= nl2br(htmlspecialchars($calcTxt, ENT_QUOTES, 'UTF-8'));
+        $body .= '</div>';
+    }
+    if (!empty($attachments)) {
+        $body .= '<div style="margin:12px 0;padding:10px 14px;background:#f1f5f9;border-left:4px solid #10b981;border-radius:4px;font-size:13px">';
+        $body .= '<b style="color:#059669">📎 Прикреплены файлы спецификации:</b><br>';
+        foreach ($attachments as $att) {
+            $body .= '• ' . htmlspecialchars(basename($att), ENT_QUOTES, 'UTF-8') . '<br>';
+        }
         $body .= '</div>';
     }
     $body .= '<p style="color:#777;font-size:12px">Отправлено автоматически. Ответить можно, позвонив клиенту.</p>';

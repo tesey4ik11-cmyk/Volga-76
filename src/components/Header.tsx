@@ -23,7 +23,6 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCalcModal }) => {
     { label: '3D Объект', href: '#hero-3d' },
     { label: 'Концепция', href: '#sequence' },
     { label: 'Конструктор', href: '#configurator' },
-    { label: 'Живая стройка', href: '#live-construction' },
     { label: 'Паспорта', href: '#passports' },
     { label: 'Инженерный центр', href: '#engineering-center' },
     { label: 'Карта объектов', href: '#region-map' },

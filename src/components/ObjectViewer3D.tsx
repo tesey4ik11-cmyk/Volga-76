@@ -32,6 +32,8 @@ export interface Dynamic3DOptions {
   techRoom?: boolean;
   deckLayout?: 'straight' | 'diag';
   hasSteps?: boolean;
+  stepsCount?: number;
+  depth?: number;
   pileDia?: '76' | '89' | '108' | '133';
   hasRostverk?: boolean;
   hasWells?: boolean;
@@ -182,6 +184,7 @@ export const ObjectViewer3D: React.FC<ObjectViewer3DProps> = ({
           d: objD,
           railing,
           hasSteps: opts.hasSteps ?? true,
+          stepsCount: opts.stepsCount,
           hasPiles,
           deckLayout: opts.deckLayout ?? 'straight',
           isBlueprint: blueprint,
@@ -200,7 +203,7 @@ export const ObjectViewer3D: React.FC<ObjectViewer3DProps> = ({
       case 'net':
         newModel = buildNetworksModel({
           type: networkType,
-          depth: opts.h ?? 1.7,
+          depth: opts.depth ?? (opts.h ?? 1.7),
           hasWells: opts.hasWells ?? true,
           wellsCount: opts.wellsCount ?? 2,
           hasHeating: opts.hasHeating ?? (networkType === 'heating'),
