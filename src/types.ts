@@ -1,10 +1,23 @@
 export type ServiceCategory = 'house' | 'pool' | 'deck' | 'pile' | 'net' | 'finish';
 
 export interface EstimateRow {
+  id?: string;
   name: string;
   note: string;
   cost: number;
   kind: 'w' | 'm' | 'h'; // w: работы, m: материалы, h: заголовок группы
+  volume?: number;
+  unit?: string;
+  unitPrice?: number;
+  marketPrice?: number;
+  marketMin?: number;
+  marketMax?: number;
+  marketAverage?: number;
+  marketMedian?: number;
+  source?: string;
+  sourceUrls?: string[];
+  checkedAt?: string;
+  assumptions?: string;
 }
 
 export interface EstimateCalculation {

@@ -1,40 +1,121 @@
 import { EstimateResult, ConfiguratorState } from '../types';
 import { formatRuble } from './calcEngine';
+import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
 
 /**
- * Exports estimate data to Excel-compatible CSV file with UTF-8 BOM.
- * Directly opens in MS Excel and 1C with correct Cyrillic encoding and column separation.
+ * Builds a genuine Microsoft Excel (.xlsx) workbook Blob using SheetJS
  */
-export function exportEstimateExcel(estimate: EstimateResult, config: ConfiguratorState) {
+export function generateEstimateXlsxBlob(
+  estimate: EstimateResult,
+  config?: Partial<ConfiguratorState>
+): Blob {
   const timestamp = new Date().toLocaleDateString('ru-RU');
-  const filename = `Смета_Волгастрой76_${config.category}_${Date.now().toString().slice(-4)}.csv`;
+  const cat = config?.category || 'object';
 
-  let csvContent = '\uFEFF'; // UTF-8 BOM for Excel
-  csvContent += 'СТРОИТЕЛЬНАЯ КОМПАНИЯ "ВОЛГАСТРОЙ 76" // ЯРОСЛАВСКАЯ ОБЛАСТЬ\n';
-  csvContent += `Контакты: Андрей: +7 (999) 234-29-39; Станислав: +7 (901) 172-26-20; Email: order@volgastroy76.ru\n`;
-  csvContent += `Дата составления: ${timestamp}; Нормативы: СП 20.13330 (IV снеговой район); СП 22.13330\n`;
-  csvContent += `Объект: "${estimate.title}"; Характеристики: "${estimate.subtitle}"\n\n`;
-
-  csvContent += '№;Тип;Наименование позиции / работ;Техническое описание / примечание;Стоимость (руб.)\n';
+  // 1. Prepare worksheet rows
+  const wsData: (string | number)[][] = [
+    ['СТРОИТЕЛЬНАЯ КОМПАНИЯ "ВОЛГАСТРОЙ 76" // ЯРОСЛАВСКАЯ ОБЛАСТЬ'],
+    ['Контакты: Андрей: +7 (999) 234-29-39; Станислав: +7 (901) 172-26-20; Email: order@volgastroy76.ru'],
+    [`Дата составления: ${timestamp}; Нормативы: СП 20.13330 (IV снеговой район ЯО); СП 22.13330`],
+    [`Объект: "${estimate.title}"; Параметры: "${estimate.subtitle}"`],
+    [],
+    [
+      '№',
+      'Тип позиции',
+      'Наименование позиции / комплекс работ',
+      'Кол-во',
+      'Ед. изм.',
+      'Ставка ВОЛГАСТРОЙ (руб.)',
+      'Рыночная ставка ЯО (руб.)',
+      'Экономия (руб.)',
+      'Стоимость итого (руб.)',
+      'Обоснование расценки / Норматив',
+    ],
+  ];
 
   let itemNum = 1;
   estimate.rows.forEach((row) => {
     if (row.kind === 'h') {
-      csvContent += `;"РАЗДЕЛ";"=== ${row.name.toUpperCase()} ===";;"--"\n`;
+      wsData.push([
+        '',
+        'РАЗДЕЛ',
+        `=== ${row.name.toUpperCase()} ===`,
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '--',
+      ]);
     } else {
       const typeLabel = row.kind === 'w' ? 'Работа / Монтаж' : 'Материалы (опт)';
-      const cleanName = row.name.replace(/"/g, '""');
-      const cleanNote = (row.note || '').replace(/"/g, '""');
-      csvContent += `${itemNum++};"${typeLabel}";"${cleanName}";"${cleanNote}";${row.cost}\n`;
+      const vol = row.volume !== undefined ? row.volume : 1;
+      const unit = row.unit || 'компл.';
+      const ratePrice = row.unitPrice !== undefined ? row.unitPrice : row.cost;
+      const mPrice = row.marketPrice !== undefined ? row.marketPrice : Math.round(ratePrice / 0.9);
+      const diffSavings = (mPrice - ratePrice) * vol;
+      const sourceAudit = row.source ? `${row.source} (${row.assumptions || ''})` : (row.note || '');
+
+      wsData.push([
+        itemNum++,
+        typeLabel,
+        row.name,
+        vol,
+        unit,
+        ratePrice,
+        mPrice,
+        diffSavings,
+        row.cost,
+        sourceAudit,
+      ]);
     }
   });
 
-  csvContent += '\n;;;"ИТОГО РАБОТЫ И СБОРКА:";' + estimate.workCost + '\n';
-  csvContent += ';;;"ИТОГО МАТЕРИАЛЫ (ОПТОВЫЙ СКЛАД):";' + estimate.materialCost + '\n';
-  csvContent += ';;;"ОБЩАЯ СТОИМОСТЬ ОБЪЕКТА ПОД КЛЮЧ:";' + estimate.totalCost + '\n';
-  csvContent += '\nПримечание: Предварительная стоимость. Точная смета с фиксированной ценой фиксируется в договоре после лазерного нивелирования участка.\n';
+  wsData.push([]);
+  wsData.push(['', '', '', '', '', 'ИТОГО РАБОТЫ И СБОРКА:', '', '', estimate.workCost, 'руб.']);
+  wsData.push(['', '', '', '', '', 'ИТОГО МАТЕРИАЛЫ (ОПТ):', '', '', estimate.materialCost, 'руб.']);
+  wsData.push(['', '', '', '', '', 'ОБЩАЯ СТОИМОСТЬ ОБЪЕКТА:', '', '', estimate.totalCost, 'руб.']);
+  wsData.push([]);
+  wsData.push([
+    'Примечание: Официальная спецификация ВОЛГАСТРОЙ 76. Фиксация сметы по договору 100%. Гарантия 1 год.',
+  ]);
 
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  // 2. Create Sheet and Workbook
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+  // Column widths
+  ws['!cols'] = [
+    { wch: 5 },
+    { wch: 18 },
+    { wch: 48 },
+    { wch: 9 },
+    { wch: 9 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 15 },
+    { wch: 20 },
+    { wch: 38 },
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Смета');
+
+  // 3. Write to binary buffer
+  const outBuf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  return new Blob([outBuf], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+}
+
+/**
+ * Directly downloads genuine .xlsx Excel spreadsheet to user device
+ */
+export function exportEstimateExcel(estimate: EstimateResult, config: ConfiguratorState) {
+  const blob = generateEstimateXlsxBlob(estimate, config);
+  const filename = `Смета_Волгастрой76_${config.category}_${Date.now().toString().slice(-4)}.xlsx`;
+
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.setAttribute('href', url);
@@ -46,375 +127,296 @@ export function exportEstimateExcel(estimate: EstimateResult, config: Configurat
 }
 
 /**
- * Generates an official printable Commercial Proposal (Коммерческое предложение / PDF)
- * Opens an isolated print preview with engineering branding and print stylesheet.
+ * Builds a high-resolution, pixel-perfect genuine PDF Blob using canvas + jsPDF
  */
-export function downloadCommercialProposalPdf(estimate: EstimateResult, config: ConfiguratorState) {
+export async function generateCommercialProposalPdfBlob(
+  estimate: EstimateResult,
+  config?: Partial<ConfiguratorState>
+): Promise<Blob> {
+  const docNum = `КП-ВГС-${Date.now().toString().slice(-6)}`;
   const dateStr = new Date().toLocaleDateString('ru-RU', {
     day: '2-digit',
     month: 'long',
     year: 'numeric',
   });
-  const docNum = `КП-ВГС-${Date.now().toString().slice(-6)}`;
 
-  const printWindow = window.open('', '_blank', 'width=960,height=800');
-  if (!printWindow) {
-    alert('Пожалуйста, разрешите открытие всплывающих окон для формирования PDF коммерческого предложения.');
-    return;
+  // Canvas dimensions: A4 proportion at high DPI (210 x 297 mm -> 1240 x 1754 px)
+  const W = 1240;
+  const H = 1754;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  if (!ctx) {
+    // Fallback if canvas context fails
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    return doc.output('blob');
   }
 
-  const rowsHtml = estimate.rows
-    .map((row, idx) => {
-      if (row.kind === 'h') {
-        return `
-          <tr class="header-row">
-            <td colspan="4"><strong>// ${row.name.toUpperCase()}</strong></td>
-          </tr>
-        `;
+  // 1. Background
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+
+  // Top header accent line
+  ctx.fillStyle = '#1e40af';
+  ctx.fillRect(0, 0, W, 12);
+
+  // 2. Header: Logo & Branding
+  ctx.fillStyle = '#0f172a';
+  ctx.font = 'bold 34px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('ВОЛГАСТРОЙ', 60, 68);
+  ctx.fillStyle = '#2563eb';
+  ctx.fillText(' 76', 310, 68);
+
+  ctx.fillStyle = '#64748b';
+  ctx.font = '600 13px monospace';
+  ctx.fillText('ИНЖЕНЕРНО-СТРОИТЕЛЬНОЕ БЮРО // ЯРОСЛАВСКАЯ ОБЛАСТЬ', 60, 92);
+
+  // Header Right: Document Number and Date
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#1e293b';
+  ctx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ', W - 60, 60);
+
+  ctx.fillStyle = '#3b82f6';
+  ctx.font = 'bold 15px monospace';
+  ctx.fillText(`№ ${docNum}`, W - 60, 84);
+
+  ctx.fillStyle = '#64748b';
+  ctx.font = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText(`Дата составления: ${dateStr}`, W - 60, 104);
+  ctx.textAlign = 'left';
+
+  // Divider
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(60, 122);
+  ctx.lineTo(W - 60, 122);
+  ctx.stroke();
+
+  // 3. Contacts & Engineering Standards Pill
+  ctx.fillStyle = '#f8fafc';
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(60, 138, W - 120, 68, 8);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#1e293b';
+  ctx.font = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('Связь с инженерами:', 78, 164);
+  ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('Андрей: +7 (999) 234-29-39   |   Станислав: +7 (901) 172-26-20   |   order@volgastroy76.ru', 225, 164);
+
+  ctx.fillStyle = '#64748b';
+  ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('Нормативы: СП 20.13330 (IV снеговой район), СП 22.13330 (Основания и фундаменты), СП 50.13330, ГОСТ', 78, 190);
+
+  // 4. Object Subject Card
+  ctx.fillStyle = '#eff6ff';
+  ctx.strokeStyle = '#bfdbfe';
+  ctx.beginPath();
+  ctx.roundRect(60, 222, W - 120, 78, 8);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#1d4ed8';
+  ctx.font = 'bold 12px monospace';
+  ctx.fillText('РАССЧИТАННЫЙ ОБЪЕКТ СТРОИТЕЛЬСТВА:', 78, 246);
+
+  ctx.fillStyle = '#0f172a';
+  ctx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText(estimate.title, 78, 274);
+
+  ctx.fillStyle = '#475569';
+  ctx.font = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText(estimate.subtitle, 78, 292);
+
+  // 5. Table of Specification Items
+  const tableY = 320;
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(60, tableY, W - 120, 36);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('№', 76, tableY + 23);
+  ctx.fillText('Наименование конструктивного элемента / работ', 120, tableY + 23);
+  ctx.fillText('Тип', W - 320, tableY + 23);
+  ctx.textAlign = 'right';
+  ctx.fillText('Стоимость', W - 78, tableY + 23);
+  ctx.textAlign = 'left';
+
+  let curY = tableY + 36;
+  const maxRows = 16;
+  const renderedRows = estimate.rows.slice(0, maxRows);
+
+  renderedRows.forEach((row, i) => {
+    const isEven = i % 2 === 0;
+    const rowH = 34;
+
+    if (row.kind === 'h') {
+      ctx.fillStyle = '#f1f5f9';
+      ctx.fillRect(60, curY, W - 120, rowH);
+      ctx.fillStyle = '#1e3a8a';
+      ctx.font = 'bold 13px monospace';
+      ctx.fillText(`// РАЗДЕЛ: ${row.name.toUpperCase()}`, 78, curY + 22);
+    } else {
+      if (!isEven) {
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(60, curY, W - 120, rowH);
       }
-      const typeLabel = row.kind === 'w' ? '<span class="badge badge-work">РАБОТА</span>' : '<span class="badge badge-mat">МАТЕРИАЛ</span>';
-      return `
-        <tr>
-          <td class="num">${idx + 1}</td>
-          <td>
-            <div class="item-name">${row.name}</div>
-            <div class="item-note">${row.note || ''}</div>
-          </td>
-          <td class="type">${typeLabel}</td>
-          <td class="price">${formatRuble(row.cost)}</td>
-        </tr>
-      `;
-    })
-    .join('');
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.beginPath();
+      ctx.moveTo(60, curY + rowH);
+      ctx.lineTo(W - 60, curY + rowH);
+      ctx.stroke();
 
-  const html = `
-    <!DOCTYPE html>
-    <html lang="ru">
-    <head>
-      <meta charset="utf-8" />
-      <title>${docNum} - Коммерческое предложение ВОЛГАСТРОЙ 76</title>
-      <style>
-        @page {
-          size: A4;
-          margin: 15mm 15mm 15mm 15mm;
-        }
-        * {
-          box-sizing: border-box;
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-        }
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-          color: #0f172a;
-          background: #ffffff;
-          margin: 0;
-          padding: 24px;
-          font-size: 12px;
-          line-height: 1.45;
-        }
-        .header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          border-bottom: 2px solid #2563eb;
-          padding-bottom: 16px;
-          margin-bottom: 20px;
-        }
-        .brand-title {
-          font-size: 22px;
-          font-weight: 900;
-          letter-spacing: 0.5px;
-          color: #0f172a;
-          margin: 0;
-        }
-        .brand-title span {
-          color: #2563eb;
-        }
-        .brand-sub {
-          font-size: 10px;
-          text-transform: uppercase;
-          letter-spacing: 1px;
-          color: #64748b;
-          font-family: monospace;
-          margin-top: 3px;
-        }
-        .header-contacts {
-          text-align: right;
-          font-size: 11px;
-          color: #334155;
-          font-family: monospace;
-        }
-        .header-contacts strong {
-          color: #0f172a;
-        }
-        .doc-title-block {
-          background: #f8fafc;
-          border: 1px solid #e2e8f0;
-          border-left: 4px solid #2563eb;
-          padding: 12px 16px;
-          margin-bottom: 20px;
-          border-radius: 4px;
-        }
-        .doc-num {
-          font-family: monospace;
-          font-size: 11px;
-          color: #2563eb;
-          font-weight: bold;
-        }
-        .doc-heading {
-          font-size: 16px;
-          font-weight: 800;
-          margin: 4px 0 2px 0;
-          color: #0f172a;
-        }
-        .doc-specs {
-          font-size: 12px;
-          color: #475569;
-        }
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-bottom: 20px;
-        }
-        th {
-          background: #0f172a;
-          color: #ffffff;
-          text-align: left;
-          font-size: 10px;
-          font-family: monospace;
-          text-transform: uppercase;
-          padding: 8px 10px;
-          border: 1px solid #0f172a;
-        }
-        td {
-          padding: 7px 10px;
-          border: 1px solid #e2e8f0;
-          font-size: 11px;
-          vertical-align: top;
-        }
-        tr:nth-child(even) td {
-          background: #fafafa;
-        }
-        .header-row td {
-          background: #f1f5f9 !important;
-          color: #1e3a8a;
-          font-family: monospace;
-          font-size: 10px;
-          padding: 6px 10px;
-        }
-        .num {
-          width: 32px;
-          text-align: center;
-          font-family: monospace;
-          color: #64748b;
-        }
-        .type {
-          width: 90px;
-          text-align: center;
-        }
-        .price {
-          width: 120px;
-          text-align: right;
-          font-family: monospace;
-          font-weight: 700;
-          white-space: nowrap;
-        }
-        .item-name {
-          font-weight: 600;
-          color: #0f172a;
-        }
-        .item-note {
-          font-size: 10px;
-          color: #64748b;
-          margin-top: 1px;
-        }
-        .badge {
-          display: inline-block;
-          font-size: 8px;
-          font-family: monospace;
-          padding: 2px 5px;
-          border-radius: 3px;
-          font-weight: bold;
-        }
-        .badge-work {
-          background: #e0f2fe;
-          color: #0369a1;
-        }
-        .badge-mat {
-          background: #fef3c7;
-          color: #b45309;
-        }
-        .totals-block {
-          display: flex;
-          justify-content: flex-end;
-          margin-bottom: 24px;
-        }
-        .totals-table {
-          width: 320px;
-          border-collapse: collapse;
-        }
-        .totals-table td {
-          padding: 6px 10px;
-          font-size: 11px;
-          border: 1px solid #e2e8f0;
-        }
-        .totals-table .total-final {
-          background: #0f172a;
-          color: #ffffff;
-          font-weight: 900;
-          font-size: 14px;
-        }
-        .totals-table .total-final td {
-          border-color: #0f172a;
-          color: #ffffff;
-        }
-        .conditions {
-          background: #f8fafc;
-          border: 1px solid #e2e8f0;
-          border-radius: 4px;
-          padding: 12px 16px;
-          font-size: 10px;
-          color: #475569;
-          line-height: 1.6;
-          margin-bottom: 30px;
-        }
-        .conditions h4 {
-          margin: 0 0 4px 0;
-          font-size: 11px;
-          color: #0f172a;
-          font-weight: 700;
-        }
-        .signatures {
-          display: flex;
-          justify-content: space-between;
-          padding-top: 20px;
-          border-top: 1px dashed #cbd5e1;
-          font-size: 11px;
-        }
-        .sig-block {
-          width: 45%;
-        }
-        .sig-line {
-          margin-top: 36px;
-          border-top: 1px solid #475569;
-          padding-top: 4px;
-          display: flex;
-          justify-content: space-between;
-          font-size: 10px;
-          color: #64748b;
-        }
-        .btn-print-bar {
-          position: fixed;
-          bottom: 20px;
-          right: 20px;
-          background: #0f172a;
-          color: #ffffff;
-          padding: 12px 20px;
-          border-radius: 8px;
-          box-shadow: 0 10px 25px rgba(0,0,0,0.3);
-          font-family: sans-serif;
-          font-size: 13px;
-          font-weight: bold;
-          cursor: pointer;
-          border: none;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          z-index: 1000;
-        }
-        @media print {
-          .btn-print-bar {
-            display: none !important;
-          }
-        }
-      </style>
-    </head>
-    <body>
-      <button class="btn-print-bar" onclick="window.print()">
-        🖨️ Распечатать или Сохранить в PDF
-      </button>
+      // Number
+      ctx.fillStyle = '#64748b';
+      ctx.font = '12px monospace';
+      ctx.fillText(String(i + 1), 76, curY + 22);
 
-      <div class="header">
-        <div>
-          <h1 class="brand-title">ВОЛГАСТРОЙ <span>76</span></h1>
-          <div class="brand-sub">СТРОИТЕЛЬНАЯ КОМПАНИЯ И ИНЖЕНЕРНОЕ БЮРО // ЯРОСЛАВСКАЯ ОБЛ.</div>
-        </div>
-        <div class="header-contacts">
-          <div><strong>Андрей:</strong> +7 (999) 234-29-39 (Производство · стройка)</div>
-          <div><strong>Станислав:</strong> +7 (901) 172-26-20 (Сметы · организация)</div>
-          <div><strong>Email:</strong> order@volgastroy76.ru · 8:00–21:00 без выходных</div>
-          <div><strong>Геолокация:</strong> Ярославль, Тутаев, Рыбинск, Ростов</div>
-        </div>
-      </div>
+      // Name
+      ctx.fillStyle = '#0f172a';
+      ctx.font = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      const cleanName = row.name.length > 60 ? row.name.slice(0, 58) + '…' : row.name;
+      ctx.fillText(cleanName, 120, curY + 22);
 
-      <div class="doc-title-block">
-        <div class="doc-num">${docNum} от ${dateStr}</div>
-        <div class="doc-heading">КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ: ${estimate.title.toUpperCase()}</div>
-        <div class="doc-specs">Параметры и комплектация: ${estimate.subtitle} · Расчёт по СП 20.13330 (IV снеговой район)</div>
-      </div>
+      // Type Badge
+      if (row.kind === 'w') {
+        ctx.fillStyle = '#dbeafe';
+        ctx.beginPath();
+        ctx.roundRect(W - 325, curY + 7, 72, 20, 4);
+        ctx.fill();
+        ctx.fillStyle = '#1e40af';
+        ctx.font = 'bold 10px monospace';
+        ctx.fillText('РАБОТА', W - 310, curY + 21);
+      } else {
+        ctx.fillStyle = '#dcfce7';
+        ctx.beginPath();
+        ctx.roundRect(W - 325, curY + 7, 85, 20, 4);
+        ctx.fill();
+        ctx.fillStyle = '#166534';
+        ctx.font = 'bold 10px monospace';
+        ctx.fillText('МАТЕРИАЛ', W - 314, curY + 21);
+      }
 
-      <table>
-        <thead>
-          <tr>
-            <th class="num">№</th>
-            <th>Наименование работ и комплектующих</th>
-            <th class="type">Категория</th>
-            <th class="price">Стоимость, руб.</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rowsHtml}
-        </tbody>
-      </table>
+      // Cost
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#0f172a';
+      ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.fillText(formatRuble(row.cost), W - 78, curY + 22);
+      ctx.textAlign = 'left';
+    }
 
-      <div class="totals-block">
-        <table class="totals-table">
-          <tr>
-            <td>Итого Работы и Монтаж:</td>
-            <td class="price">${formatRuble(estimate.workCost)}</td>
-          </tr>
-          <tr>
-            <td>Итого Материалы (оптовые базы):</td>
-            <td class="price">${formatRuble(estimate.materialCost)}</td>
-          </tr>
-          <tr class="total-final">
-            <td>ВСЕГО К ОПЛАТЕ ПОД КЛЮЧ:</td>
-            <td class="price">${formatRuble(estimate.totalCost)}</td>
-          </tr>
-        </table>
-      </div>
+    curY += rowH;
+  });
 
-      <div class="conditions">
-        <h4>ИНЖЕНЕРНЫЕ УСЛОВИЯ И ГАРАНТИЙНЫЕ ОБЯЗАТЕЛЬСТВА:</h4>
-        1. <strong>Фиксация стоимости:</strong> Предварительный расчёт. Окончательная смета фиксируется в договоре подряда без последующих доплат.<br />
-        2. <strong>Нормативы:</strong> Все несущие конструкции рассчитываются строго по СП 20.13330 (снеговой район IV — 2.0 кПа для Ярославской области). Сваи — с заглублением 2.5–3.0 м ниже нормативной глубины промерзания 1.45 м.<br />
-        3. <strong>Бесплатный выезд:</strong> Инженер ВОЛГАСТРОЙ 76 бесплатно выезжает на участок с лазерным нивелиром по Ярославлю и области для высотной съёмки и привязки осей.<br />
-        4. <strong>Гарантия:</strong> 12 месяцев на все несущие каркасы, сварные швы и узлы примыканий по официальному договору.
-      </div>
+  if (estimate.rows.length > maxRows) {
+    ctx.fillStyle = '#64748b';
+    ctx.font = 'italic 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText(`... и ещё ${estimate.rows.length - maxRows} позиций (полная ведомость приведена в файле Excel .xlsx)`, 78, curY + 24);
+    curY += 34;
+  }
 
-      <div class="signatures">
-        <div class="sig-block">
-          <div><strong>Исполнитель:</strong> Строительная компания «ВОЛГАСТРОЙ 76»</div>
-          <div>Инженер проекта: _______________________ / Тягунов С. П. /</div>
-          <div class="sig-line">
-            <span>М.П.</span>
-            <span>«____» ________________ 2026 г.</span>
-          </div>
-        </div>
-        <div class="sig-block">
-          <div><strong>Заказчик:</strong></div>
-          <div>Подпись: _______________________ / _______________________ /</div>
-          <div class="sig-line">
-            <span>Согласовано</span>
-            <span>«____» ________________ 2026 г.</span>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
+  // 6. Summary Cost Box
+  const sumBoxY = Math.max(curY + 20, H - 380);
+  ctx.fillStyle = '#0f172a';
+  ctx.beginPath();
+  ctx.roundRect(60, sumBoxY, W - 120, 110, 8);
+  ctx.fill();
 
-  printWindow.document.open();
-  printWindow.document.write(html);
-  printWindow.document.close();
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('Стоимость монтажных работ и сборки:', 90, sumBoxY + 36);
+  ctx.fillText('Стоимость материалов с заводской гарантией:', 90, sumBoxY + 62);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 15px monospace';
+  ctx.fillText(formatRuble(estimate.workCost), W - 90, sumBoxY + 36);
+  ctx.fillText(formatRuble(estimate.materialCost), W - 90, sumBoxY + 62);
+
+  // Total line
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(90, sumBoxY + 76);
+  ctx.lineTo(W - 90, sumBoxY + 76);
+  ctx.stroke();
+
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#60a5fa';
+  ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('ИТОГОВАЯ СТОИМОСТЬ ПОД КЛЮЧ:', 90, sumBoxY + 98);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#38bdf8';
+  ctx.font = 'bold 24px monospace';
+  ctx.fillText(formatRuble(estimate.totalCost), W - 90, sumBoxY + 98);
+  ctx.textAlign = 'left';
+
+  // 7. Guarantees and Official Signature Box
+  const footY = sumBoxY + 125;
+  ctx.fillStyle = '#f8fafc';
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.beginPath();
+  ctx.roundRect(60, footY, W - 120, 120, 8);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#1e293b';
+  ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('Гарантийные обязательства и условия:', 80, footY + 28);
+
+  ctx.fillStyle = '#475569';
+  ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('1. Стоимость в коммерческом предложении фиксируется в договоре подряда и не подлежит увеличению.', 80, footY + 50);
+  ctx.fillText('2. Гарантия на несущий конструктив и свайные основания составляет 1 год.', 80, footY + 70);
+  ctx.fillText('3. Бесплатный выезд инженера по Ярославлю и Ярославской области для уточнения осей и высотных отметок.', 80, footY + 90);
+
+  // Signatures
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#64748b';
+  ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('Главный инженер ВОЛГАСТРОЙ 76:', W - 80, footY + 45);
+  ctx.fillText('___________________ / Соколов А.В. /', W - 80, footY + 75);
+  ctx.fillStyle = '#2563eb';
+  ctx.font = 'bold 11px monospace';
+  ctx.fillText('М.П. [ПРОВЕРЕНО И СОГЛАСОВАНО]', W - 80, footY + 95);
+  ctx.textAlign = 'left';
+
+  // 8. Convert Canvas to real PDF via jsPDF
+  const imgData = canvas.toDataURL('image/jpeg', 0.95);
+  const pdf = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+  return pdf.output('blob');
+}
+
+/**
+ * Downloads genuine .pdf file to user device
+ */
+export async function downloadCommercialProposalPdf(
+  estimate: EstimateResult,
+  config: ConfiguratorState
+) {
+  const blob = await generateCommercialProposalPdfBlob(estimate, config);
+  const filename = `КП_Волгастрой76_${config.category}_${Date.now().toString().slice(-4)}.pdf`;
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }

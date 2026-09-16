@@ -802,7 +802,7 @@ export function buildPoolModel({
     const trH = 1.15;
     const trX = -w / 2 - bw - trW / 2 + 0.25;
     const trZ = -d / 2 + trD / 2;
-    const trY = deckTopY + trH / 2;
+    const trY = deck ? deckTopY + trH / 2 : trH / 2;
 
     const boxMat = isBlueprint
       ? new THREE.MeshBasicMaterial({ color: 0x38bdf8, wireframe: true })
@@ -858,47 +858,55 @@ export function buildPoolModel({
   }
 
   // 5. Pool Enclosure / Pavilion
-  const activePavilion = pavilionType !== 'none' && (pavilion || pavilionType === 'slide');
+  const activePavilion = pavilionType !== 'none';
   if (activePavilion) {
     const archMat = isBlueprint
       ? new THREE.MeshBasicMaterial({ color: 0x38bdf8, wireframe: true, side: THREE.DoubleSide })
       : new THREE.MeshStandardMaterial({
-          color: 0xe0f2fe,
+          color: 0x60a5fa,
           transparent: true,
-          opacity: 0.42,
-          roughness: 0.1,
-          metalness: 0.1,
+          opacity: 0.62,
+          roughness: 0.12,
+          metalness: 0.2,
           side: THREE.DoubleSide,
         });
 
-    const hoopMat = mStd(0x475569, { metalness: 0.85, roughness: 0.2 });
-    const railMat = mStd(0x94a3b8, { metalness: 0.9, roughness: 0.2 });
+    const hoopMat = mStd(0x475569, { metalness: 0.9, roughness: 0.2 });
+    const railMat = mStd(0x94a3b8, { metalness: 0.92, roughness: 0.18 });
+    const baseY = deck ? deckTopY + 0.02 : poolRimY + 0.02;
 
     if (pavilionType === 'slide') {
       // Telescopic sliding enclosure with ground rails and 3 nested arched segments
-      const railLen = w + 2.2;
-      const spanRadius = (d + 0.8) / 2;
-      const baseY = deckTopY + 0.02;
+      const railLen = w + 2.4;
+      const spanRadius = (d + 0.85) / 2;
 
-      // Dual ground rails along the deck
+      // Dual heavy-duty ground rails along both sides of pool
       [-spanRadius, spanRadius].forEach((rz) => {
-        const rail = new THREE.Mesh(new THREE.BoxGeometry(railLen, 0.025, 0.05), railMat);
-        rail.position.set(0, baseY, rz);
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(railLen, 0.035, 0.07), railMat);
+        rail.position.set(0, baseY + 0.017, rz);
         g.add(rail);
+
+        // End track stops
+        [-railLen / 2 + 0.05, railLen / 2 - 0.05].forEach((ex) => {
+          const stopMesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.09), hoopMat);
+          stopMesh.position.set(ex, baseY + 0.04, rz);
+          g.add(stopMesh);
+        });
       });
 
-      // 3 Telescopic sliding segments with graduated dimensions
+      // 3 Telescopic sliding segments with graduated dimensions fully covering pool length
+      const segLen = (w + 0.8) / 2.75;
       const segments = [
-        { r: spanRadius - 0.12, wSec: (w + 0.4) / 3, xOffset: -w / 3.2 },
-        { r: spanRadius - 0.04, wSec: (w + 0.4) / 3, xOffset: -w / 6.5 },
-        { r: spanRadius + 0.04, wSec: (w + 0.4) / 3, xOffset: 0.15 },
+        { r: spanRadius - 0.08, wSec: segLen, xOffset: -w / 3.0 },
+        { r: spanRadius, wSec: segLen, xOffset: 0 },
+        { r: spanRadius + 0.08, wSec: segLen, xOffset: w / 3.0 },
       ];
 
       segments.forEach((seg, idx) => {
-        // Front & back arches of each sliding module
-        [-seg.wSec / 2, seg.wSec / 2].forEach((ax) => {
+        // Structural arch hoops (front, middle, back of each sliding section)
+        [-seg.wSec / 2, 0, seg.wSec / 2].forEach((ax) => {
           const archHoop = new THREE.Mesh(
-            new THREE.TorusGeometry(seg.r, 0.03, 8, 32, Math.PI),
+            new THREE.TorusGeometry(seg.r, 0.035, 10, 36, Math.PI),
             hoopMat
           );
           archHoop.rotation.y = Math.PI / 2;
@@ -907,19 +915,27 @@ export function buildPoolModel({
 
           // Roller wheel carriages resting on rails
           [-seg.r, seg.r].forEach((wz) => {
-            const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.04, 12), hoopMat);
+            const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.05, 14), hoopMat);
             wheel.rotation.z = Math.PI / 2;
             wheel.position.set(seg.xOffset + ax, baseY + 0.025, wz);
             g.add(wheel);
           });
         });
 
-        // Glazed polycarbonate skin for each sliding segment
+        // Longitudinal stringers / purlins along the arch for realistic rigidity
+        [-seg.r * 0.7, 0, seg.r * 0.7].forEach((pz) => {
+          const py = Math.sqrt(Math.max(0, seg.r * seg.r - pz * pz));
+          const stringer = new THREE.Mesh(new THREE.BoxGeometry(seg.wSec, 0.03, 0.03), hoopMat);
+          stringer.position.set(seg.xOffset, baseY + py, pz);
+          g.add(stringer);
+        });
+
+        // Crystal-clear UV-treated polycarbonate skin for each sliding segment
         const skinGeo = new THREE.CylinderGeometry(
           seg.r,
           seg.r,
           seg.wSec,
-          32,
+          36,
           1,
           true,
           0,
@@ -929,16 +945,32 @@ export function buildPoolModel({
         skinMesh.rotation.z = Math.PI / 2;
         skinMesh.position.set(seg.xOffset, baseY, 0);
         g.add(skinMesh);
+
+        // End glazing wall with entrance door frame on outer sections (first and last)
+        if (idx === 0 || idx === segments.length - 1) {
+          const endAx = idx === 0 ? -seg.wSec / 2 : seg.wSec / 2;
+          const endGeo = new THREE.CircleGeometry(seg.r, 36, 0, Math.PI);
+          const endWall = new THREE.Mesh(endGeo, archMat);
+          endWall.rotation.y = Math.PI / 2;
+          endWall.position.set(seg.xOffset + endAx, baseY, 0);
+          g.add(endWall);
+
+          // Door frame on end wall
+          const doorW = 0.8;
+          const doorH = seg.r * 0.85;
+          const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(0.04, doorH, doorW), hoopMat);
+          doorFrame.position.set(seg.xOffset + endAx, baseY + doorH / 2, 0);
+          g.add(doorFrame);
+        }
       });
     } else {
       // Fixed arched polycarbonate barrel pavilion
       const archRadius = (d + 1.2) / 2;
-      const baseY = deckTopY + 0.02;
 
       for (let i = -2; i <= 2; i++) {
         const x = (i * w) / 4.4;
         const hoop = new THREE.Mesh(
-          new THREE.TorusGeometry(archRadius, 0.032, 8, 32, Math.PI),
+          new THREE.TorusGeometry(archRadius, 0.035, 10, 36, Math.PI),
           hoopMat
         );
         hoop.rotation.y = Math.PI / 2;
@@ -946,11 +978,19 @@ export function buildPoolModel({
         g.add(hoop);
       }
 
+      // Longitudinal roof purlins
+      [-archRadius * 0.7, 0, archRadius * 0.7].forEach((pz) => {
+        const py = Math.sqrt(Math.max(0, archRadius * archRadius - pz * pz));
+        const purlin = new THREE.Mesh(new THREE.BoxGeometry(w + 0.5, 0.03, 0.03), hoopMat);
+        purlin.position.set(0, baseY + py, pz);
+        g.add(purlin);
+      });
+
       const cylinderGeo = new THREE.CylinderGeometry(
         archRadius,
         archRadius,
         w + 0.4,
-        32,
+        36,
         1,
         true,
         0,
@@ -974,6 +1014,7 @@ export function buildTerraceModel({
   d = 3.6,
   railing = true,
   hasSteps = true,
+  stepsCount,
   hasPiles = true,
   deckLayout = 'straight',
   isBlueprint = false,
@@ -982,6 +1023,7 @@ export function buildTerraceModel({
   d?: number;
   railing?: boolean;
   hasSteps?: boolean;
+  stepsCount?: number;
   hasPiles?: boolean;
   deckLayout?: 'straight' | 'diag';
   isBlueprint?: boolean;
@@ -1145,16 +1187,25 @@ export function buildTerraceModel({
     }
   }
 
-  // Steps down to ground level
-  if (hasSteps) {
+  // Steps down to ground level (strictly conditional based on hasSteps and stepsCount)
+  const numSteps = stepsCount !== undefined ? stepsCount : hasSteps ? 2 : 0;
+  if (numSteps > 0) {
     const stepMat = deckMat;
-    const step1 = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.16, 0.32), stepMat);
-    step1.position.set(0, 0.45, d / 2 + 0.16);
-    g.add(step1);
+    const stepDepth = 0.32;
+    const stepHeight = 0.60 / (numSteps + 1);
 
-    const step2 = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.16, 0.32), stepMat);
-    step2.position.set(0, 0.22, d / 2 + 0.48);
-    g.add(step2);
+    for (let s = 1; s <= numSteps; s++) {
+      const stepMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(1.6, stepHeight, stepDepth),
+        stepMat
+      );
+      const sy = 0.66 - s * stepHeight + stepHeight / 2;
+      const sz = d / 2 + s * stepDepth - stepDepth / 2;
+      stepMesh.position.set(0, sy, sz);
+      stepMesh.castShadow = true;
+      stepMesh.receiveShadow = true;
+      g.add(stepMesh);
+    }
   }
 
   return g;
