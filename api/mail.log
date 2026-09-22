@@ -1,0 +1,91 @@
+[2026-09-17 12:09:58] [DB_SAVED] Lead successfully saved to DB | {"lead_id":13}
+[2026-09-17 12:09:58] [FILE_SAVED] Saved attachment Smeta_Volgastroy76.xlsx | {"size":42208,"type":"application\/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+[2026-09-17 12:09:58] [FILE_SAVED] Saved attachment Kommercheskoe_Predlozhenie.pdf | {"size":285154,"type":"application\/pdf"}
+[2026-09-17 12:09:59] [MAIL_SENT] mail() succeeded for recipient | {"to":"order@volgastroy76.ru","lead_id":13,"attachments":2}
+[2026-09-17 12:09:59] [MAIL_SENT] mail() succeeded for recipient | {"to":"a.zvonaryov@volgastroy76.ru","lead_id":13,"attachments":2}
+[2026-09-17 12:10:00] [MAIL_SENT] mail() succeeded for recipient | {"to":"s.tyagunov@volgastroy76.ru","lead_id":13,"attachments":2}
+[2026-09-17 12:10:00] [MAIL_SENT] mail() succeeded for recipient | {"to":"info@volgastroy76.ru","lead_id":13,"attachments":2}
+[2026-09-17 12:23:50] [REQUEST_IN] Incoming lead request | {"content_type":"","raw_size":0,"name":"Евгений","phone":"+7 (964) ***-**-20","object_type":"Смета на строительство модульного\/каркасного дома","location":"Ярославль и Ярославский р-н","files_count":2}
+[2026-09-17 12:23:50] [DB_SAVED] Lead saved into database | {"lead_id":14}
+[2026-09-17 12:23:50] [FILE_SAVED] Attachment stored: Smeta_Volgastroy76.xlsx | {"size":42208,"type":"application\/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+[2026-09-17 12:23:50] [FILE_SAVED] Attachment stored: Kommercheskoe_Predlozhenie.pdf | {"size":285128,"type":"application\/pdf"}
+[2026-09-17 12:23:50] [MAIL_SUCCESS] mail() queued for order@volgastroy76.ru | {"lead_id":14,"attachments":2}
+[2026-09-17 12:23:50] [MAIL_SUCCESS] mail() queued for a.zvonaryov@volgastroy76.ru | {"lead_id":14,"attachments":2}
+[2026-09-17 12:23:51] [MAIL_SUCCESS] mail() queued for s.tyagunov@volgastroy76.ru | {"lead_id":14,"attachments":2}
+[2026-09-17 12:23:51] [MAIL_SUCCESS] mail() queued for info@volgastroy76.ru | {"lead_id":14,"attachments":2}
+[2026-09-17 13:26:10] [REVIEW_SAVED] Review #3 saved with approved=0 for author 'EST_PROD_20260917'
+[2026-09-17 13:26:10] [REVIEW_MAIL_SUCCESS] Moderation notification sent for review #3 to 4 recipient(s)
+[2026-09-17 13:31:44] [REQUEST_IN] Incoming lead submission | {"content_type":"","raw_size":0,"post_keys":["name","phone","location","subject","message","calc","calc_json"],"files_keys":["excelFile","pdfFile"],"files_diag":{"excelFile":{"name":"estimate.xlsx","size":42208,"error":0,"type":"application\/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},"pdfFile":{"name":"proposal.pdf","size":285154,"error":0,"type":"application\/pdf"}},"name":"Евгений","phone":"+7 (964) ***-**-20","object_type":"Смета на строительство модульного\/каркасного дома","location":"Ярославль и Ярославский р-н"}
+[2026-09-17 13:31:44] [DB_SAVED] Lead saved into database | {"lead_id":15}
+[2026-09-17 13:31:44] [FILE_SAVED] Attachment stored: Smeta_Volgastroy76.xlsx | {"size":42208,"type":"application\/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+[2026-09-17 13:31:44] [FILE_SAVED] Attachment stored: Kommercheskoe_Predlozhenie.pdf | {"size":285154,"type":"application\/pdf"}
+[2026-09-17 13:31:45] [MAIL_SUCCESS] mail() queued for order@volgastroy76.ru | {"lead_id":15,"attachments":2}
+[2026-09-17 13:31:45] [MAIL_SUCCESS] mail() queued for a.zvonaryov@volgastroy76.ru | {"lead_id":15,"attachments":2}
+[2026-09-17 13:31:46] [MAIL_SUCCESS] mail() queued for s.tyagunov@volgastroy76.ru | {"lead_id":15,"attachments":2}
+[2026-09-17 13:31:47] [MAIL_SUCCESS] mail() queued for info@volgastroy76.ru | {"lead_id":15,"attachments":2}
+[2026-09-17 13:34:01] [REQUEST_IN] Incoming lead submission | {"content_type":"","raw_size":0,"post_keys":["name","phone","location","subject","message","calc","calc_json"],"files_keys":["excelFile","pdfFile"],"files_diag":{"excelFile":{"name":"estimate.xlsx","size":42208,"error":0,"type":"application\/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},"pdfFile":{"name":"proposal.pdf","size":285061,"error":0,"type":"application\/pdf"}},"name":"1","phone":"+7 (964) ***-**-99","object_type":"Смета на строительство модульного\/каркасного дома","location":"Ярославль и Ярославский р-н"}
+[2026-09-17 13:34:01] [DB_SAVED] Lead saved into database | {"lead_id":16}
+[2026-09-17 13:34:01] [FILE_SAVED] Attachment stored: Smeta_Volgastroy76.xlsx | {"size":42208,"type":"application\/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+[2026-09-17 13:34:01] [FILE_SAVED] Attachment stored: Kommercheskoe_Predlozhenie.pdf | {"size":285061,"type":"application\/pdf"}
+[2026-09-17 13:34:01] [MAIL_SUCCESS] mail() queued for order@volgastroy76.ru | {"lead_id":16,"attachments":2}
+[2026-09-17 13:34:02] [MAIL_SUCCESS] mail() queued for a.zvonaryov@volgastroy76.ru | {"lead_id":16,"attachments":2}
+[2026-09-17 13:34:03] [MAIL_SUCCESS] mail() queued for s.tyagunov@volgastroy76.ru | {"lead_id":16,"attachments":2}
+[2026-09-17 13:34:04] [MAIL_SUCCESS] mail() queued for info@volgastroy76.ru | {"lead_id":16,"attachments":2}
+[2026-09-17 13:45:15] [REVIEW_SAVED] Review #4 saved with approved=0 for author 'fdgdfgdfgdg'
+[2026-09-17 13:45:15] [REVIEW_MAIL_SUCCESS] Moderation notification sent for review #4 to 4 recipient(s)
+[2026-09-17 13:47:46] [REQUEST_IN] Incoming lead submission | {"content_type":"","raw_size":0,"post_keys":["name","phone","location","objectType","subject","estimatedCost","comment","message","timestamp","calc","calc_json"],"files_keys":["excelFile","pdfFile"],"files_diag":{"excelFile":{"name":"estimate.xlsx","size":42208,"error":0,"type":"application\/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},"pdfFile":{"name":"proposal.pdf","size":285122,"error":0,"type":"application\/pdf"}},"name":"Евгений","phone":"+7 (964) ***-**-20","object_type":"Смета на строительство модульного\/каркасного дома","location":"Ярославль и Ярославский р-н"}
+[2026-09-17 13:47:46] [DB_SAVED] Lead saved into database | {"lead_id":17}
+[2026-09-17 13:47:46] [FILE_SAVED] Attachment stored: Smeta_Volgastroy76.xlsx | {"size":42208,"type":"application\/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+[2026-09-17 13:47:46] [FILE_SAVED] Attachment stored: Kommercheskoe_Predlozhenie.pdf | {"size":285122,"type":"application\/pdf"}
+[2026-09-17 13:47:47] [MAIL_SUCCESS] mail() queued for order@volgastroy76.ru | {"lead_id":17,"attachments":2}
+[2026-09-17 13:47:47] [MAIL_SUCCESS] mail() queued for a.zvonaryov@volgastroy76.ru | {"lead_id":17,"attachments":2}
+[2026-09-17 13:47:48] [MAIL_SUCCESS] mail() queued for s.tyagunov@volgastroy76.ru | {"lead_id":17,"attachments":2}
+[2026-09-17 13:47:48] [MAIL_SUCCESS] mail() queued for info@volgastroy76.ru | {"lead_id":17,"attachments":2}
+[2026-09-17 14:14:39] [REQUEST_IN] Incoming lead submission | {"content_type":"","raw_size":0,"post_keys":["name","phone","location","objectType","subject","estimatedCost","comment","message","timestamp","calc","calc_json"],"files_keys":["excelFile","pdfFile"],"files_diag":{"excelFile":{"name":"estimate.xlsx","size":42208,"error":0,"type":"application\/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},"pdfFile":{"name":"proposal.pdf","size":285041,"error":0,"type":"application\/pdf"}},"name":"Tfdfdfdf","phone":"+7 (999) ***-**-99","object_type":"Смета на строительство модульного\/каркасного дома","location":"Ярославль и Ярославский р-н"}
+[2026-09-17 14:14:39] [DB_SAVED] Lead saved into database | {"lead_id":18}
+[2026-09-17 14:14:39] [FILE_SAVED] Attachment stored: Smeta_Volgastroy76.xlsx | {"size":42208,"type":"application\/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+[2026-09-17 14:14:39] [FILE_SAVED] Attachment stored: Kommercheskoe_Predlozhenie.pdf | {"size":285041,"type":"application\/pdf"}
+[2026-09-17 14:14:41] [MAIL_SUCCESS] Notification sent to order@volgastroy76.ru | {"lead_id":18,"attachments":2,"diag":"[MAIL_SUCCESS] mail() успешно передал письмо в очередь Sendmail для order@volgastroy76.ru"}
+[2026-09-17 14:14:43] [MAIL_SUCCESS] Notification sent to a.zvonaryov@volgastroy76.ru | {"lead_id":18,"attachments":2,"diag":"[MAIL_SUCCESS] mail() успешно передал письмо в очередь Sendmail для a.zvonaryov@volgastroy76.ru"}
+[2026-09-17 14:14:44] [MAIL_SUCCESS] Notification sent to s.tyagunov@volgastroy76.ru | {"lead_id":18,"attachments":2,"diag":"[MAIL_SUCCESS] mail() успешно передал письмо в очередь Sendmail для s.tyagunov@volgastroy76.ru"}
+[2026-09-17 14:14:46] [MAIL_SUCCESS] Notification sent to info@volgastroy76.ru | {"lead_id":18,"attachments":2,"diag":"[MAIL_SUCCESS] mail() успешно передал письмо в очередь Sendmail для info@volgastroy76.ru"}
+[2026-09-17 14:23:06] [REQUEST_IN] Incoming lead submission | {"content_type":"","raw_size":0,"post_keys":["name","phone","location","objectType","subject","estimatedCost","comment","message","timestamp","calc","calc_json"],"files_keys":["excelFile","pdfFile"],"files_diag":{"excelFile":{"name":"estimate.xlsx","size":42208,"error":0,"type":"application\/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},"pdfFile":{"name":"proposal.pdf","size":285091,"error":0,"type":"application\/pdf"}},"name":"rrrrrrrrr","phone":"+7 (999) ***-**-99","object_type":"Смета на строительство модульного\/каркасного дома","location":"Ярославль и Ярославский р-н"}
+[2026-09-17 14:23:06] [DB_SAVED] Lead saved into database | {"lead_id":19}
+[2026-09-17 14:23:06] [FILE_SAVED] Attachment stored: Smeta_Volgastroy76.xlsx | {"size":42208,"type":"application\/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+[2026-09-17 14:23:06] [FILE_SAVED] Attachment stored: Kommercheskoe_Predlozhenie.pdf | {"size":285091,"type":"application\/pdf"}
+[2026-09-17 14:23:06] [MAIL_SUCCESS] Notification sent to order@volgastroy76.ru | {"lead_id":19,"attachments":2,"diag":"[MAIL_SUCCESS] mail() успешно передал письмо в очередь Sendmail для order@volgastroy76.ru"}
+[2026-09-17 14:23:07] [MAIL_SUCCESS] Notification sent to a.zvonaryov@volgastroy76.ru | {"lead_id":19,"attachments":2,"diag":"[MAIL_SUCCESS] mail() успешно передал письмо в очередь Sendmail для a.zvonaryov@volgastroy76.ru"}
+[2026-09-17 14:23:07] [MAIL_SUCCESS] Notification sent to s.tyagunov@volgastroy76.ru | {"lead_id":19,"attachments":2,"diag":"[MAIL_SUCCESS] mail() успешно передал письмо в очередь Sendmail для s.tyagunov@volgastroy76.ru"}
+[2026-09-17 14:23:08] [MAIL_SUCCESS] Notification sent to info@volgastroy76.ru | {"lead_id":19,"attachments":2,"diag":"[MAIL_SUCCESS] mail() успешно передал письмо в очередь Sendmail для info@volgastroy76.ru"}
+[2026-09-17 14:26:35] [REQUEST_IN] Incoming lead submission | {"content_type":"","raw_size":0,"post_keys":["name","phone","location","objectType","subject","estimatedCost","comment","message","timestamp","calc","calc_json"],"files_keys":["excelFile","pdfFile"],"files_diag":{"excelFile":{"name":"estimate.xlsx","size":42208,"error":0,"type":"application\/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},"pdfFile":{"name":"proposal.pdf","size":285039,"error":0,"type":"application\/pdf"}},"name":"fdffffffffff","phone":"+7 (999) ***-**-99","object_type":"Смета на строительство модульного\/каркасного дома","location":"Ярославль и Ярославский р-н"}
+[2026-09-17 14:26:35] [DB_SAVED] Lead saved into database | {"lead_id":20}
+[2026-09-17 14:26:35] [FILE_SAVED] Attachment stored: Smeta_Volgastroy76.xlsx | {"size":42208,"type":"application\/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+[2026-09-17 14:26:35] [FILE_SAVED] Attachment stored: Kommercheskoe_Predlozhenie.pdf | {"size":285039,"type":"application\/pdf"}
+[2026-09-17 14:26:36] [MAIL_SUCCESS] Notification sent to order@volgastroy76.ru | {"lead_id":20,"attachments":2,"diag":"[MAIL_SUCCESS] mail() успешно передал письмо в очередь Sendmail для order@volgastroy76.ru"}
+[2026-09-17 14:26:36] [MAIL_SUCCESS] Notification sent to a.zvonaryov@volgastroy76.ru | {"lead_id":20,"attachments":2,"diag":"[MAIL_SUCCESS] mail() успешно передал письмо в очередь Sendmail для a.zvonaryov@volgastroy76.ru"}
+[2026-09-17 14:26:37] [MAIL_SUCCESS] Notification sent to s.tyagunov@volgastroy76.ru | {"lead_id":20,"attachments":2,"diag":"[MAIL_SUCCESS] mail() успешно передал письмо в очередь Sendmail для s.tyagunov@volgastroy76.ru"}
+[2026-09-17 14:26:38] [MAIL_SUCCESS] Notification sent to info@volgastroy76.ru | {"lead_id":20,"attachments":2,"diag":"[MAIL_SUCCESS] mail() успешно передал письмо в очередь Sendmail для info@volgastroy76.ru"}
+[2026-09-17 14:59:26] [REQUEST_IN] Incoming lead submission | {"content_type":"","raw_size":0,"post_keys":["name","phone","location","objectType","subject","estimatedCost","comment","message","timestamp","calc","calc_json"],"files_keys":["excelFile","pdfFile"],"files_diag":{"excelFile":{"name":"estimate.xlsx","size":42208,"error":0,"type":"application\/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},"pdfFile":{"name":"proposal.pdf","size":285047,"error":0,"type":"application\/pdf"}},"name":"111111111111111111111","phone":"+7 (111) ***-**-11","object_type":"Смета на строительство модульного\/каркасного дома","location":"Ярославль и Ярославский р-н"}
+[2026-09-17 14:59:26] [DB_SAVED] Lead saved into database | {"lead_id":21}
+[2026-09-17 14:59:26] [FILE_SAVED] Attachment stored: Smeta_Volgastroy76.xlsx | {"size":42208,"type":"application\/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+[2026-09-17 14:59:26] [FILE_SAVED] Attachment stored: Kommercheskoe_Predlozhenie.pdf | {"size":285047,"type":"application\/pdf"}
+[2026-09-17 14:59:42] [MAIL_SUCCESS] Notification sent to order@volgastroy76.ru | {"lead_id":21,"attachments":2,"diag":"[MAIL_SUCCESS] mail() успешно передал письмо в очередь Sendmail для order@volgastroy76.ru"}
+[2026-09-17 14:59:57] [MAIL_SUCCESS] Notification sent to a.zvonaryov@volgastroy76.ru | {"lead_id":21,"attachments":2,"diag":"[MAIL_SUCCESS] mail() успешно передал письмо в очередь Sendmail для a.zvonaryov@volgastroy76.ru"}
+[2026-09-17 15:00:16] [MAIL_SUCCESS] Notification sent to s.tyagunov@volgastroy76.ru | {"lead_id":21,"attachments":2,"diag":"[MAIL_SUCCESS] mail() успешно передал письмо в очередь Sendmail для s.tyagunov@volgastroy76.ru"}
+[2026-09-17 15:00:19] [MAIL_SUCCESS] Notification sent to info@volgastroy76.ru | {"lead_id":21,"attachments":2,"diag":"[MAIL_SUCCESS] mail() успешно передал письмо в очередь Sendmail для info@volgastroy76.ru"}
+[2026-09-17 15:27:17] [REQUEST_IN] Incoming lead submission | {"content_type":"","raw_size":0,"post_keys":["name","phone","location","objectType","subject","estimatedCost","comment","message","timestamp","calc","calc_json"],"files_keys":["excelFile","pdfFile"],"files_diag":{"excelFile":{"name":"estimate.xlsx","size":42208,"error":0,"type":"application\/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},"pdfFile":{"name":"proposal.pdf","size":285055,"error":0,"type":"application\/pdf"}},"name":"Евгений","phone":"+7 (964) ***-**-20","object_type":"Смета на строительство модульного\/каркасного дома","location":"Ярославль и Ярославский р-н"}
+[2026-09-17 15:27:17] [DB_SAVED] Lead saved into database | {"lead_id":22}
+[2026-09-17 15:27:17] [FILE_SAVED] Attachment stored: Smeta_Volgastroy76.xlsx | {"size":42208,"type":"application\/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+[2026-09-17 15:27:17] [FILE_SAVED] Attachment stored: Kommercheskoe_Predlozhenie.pdf | {"size":285055,"type":"application\/pdf"}
+[2026-09-17 15:27:18] [MAIL_SUCCESS] Notification sent to order@volgastroy76.ru | {"lead_id":22,"attachments":2,"diag":"[SMTP_SUCCESS] Письмо успешно принято сервером smtp.mail.ru для order@volgastroy76.ru"}
+[2026-09-17 15:27:19] [MAIL_SUCCESS] Notification sent to a.zvonaryov@volgastroy76.ru | {"lead_id":22,"attachments":2,"diag":"[SMTP_SUCCESS] Письмо успешно принято сервером smtp.mail.ru для a.zvonaryov@volgastroy76.ru"}
+[2026-09-17 15:27:21] [MAIL_SUCCESS] Notification sent to s.tyagunov@volgastroy76.ru | {"lead_id":22,"attachments":2,"diag":"[SMTP_SUCCESS] Письмо успешно принято сервером smtp.mail.ru для s.tyagunov@volgastroy76.ru"}
+[2026-09-17 15:27:22] [MAIL_SUCCESS] Notification sent to info@volgastroy76.ru | {"lead_id":22,"attachments":2,"diag":"[SMTP_SUCCESS] Письмо успешно принято сервером smtp.mail.ru для info@volgastroy76.ru"}
+[2026-09-17 15:37:47] [REQUEST_IN] Incoming lead submission | {"content_type":"","raw_size":0,"post_keys":["name","phone","location","objectType","subject","estimatedCost","comment","message","timestamp","calc","calc_json"],"files_keys":["excelFile","pdfFile"],"files_diag":{"excelFile":{"name":"estimate.xlsx","size":42208,"error":0,"type":"application\/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},"pdfFile":{"name":"proposal.pdf","size":285136,"error":0,"type":"application\/pdf"}},"name":"Евгений","phone":"+7 (964) ***-**-20","object_type":"Смета на строительство модульного\/каркасного дома","location":"Ярославль и Ярославский р-н"}
+[2026-09-17 15:37:47] [DB_SAVED] Lead saved into database | {"lead_id":23}
+[2026-09-17 15:37:47] [FILE_SAVED] Attachment stored: Smeta_Volgastroy76.xlsx | {"size":42208,"type":"application\/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+[2026-09-17 15:37:47] [FILE_SAVED] Attachment stored: Kommercheskoe_Predlozhenie.pdf | {"size":285136,"type":"application\/pdf"}
+[2026-09-17 15:37:48] [MAIL_SUCCESS] Notification sent to order@volgastroy76.ru | {"lead_id":23,"attachments":2,"diag":"[SMTP_SUCCESS] Письмо успешно принято сервером smtp.mail.ru для order@volgastroy76.ru"}
+[2026-09-17 15:37:50] [MAIL_SUCCESS] Notification sent to a.zvonaryov@volgastroy76.ru | {"lead_id":23,"attachments":2,"diag":"[SMTP_SUCCESS] Письмо успешно принято сервером smtp.mail.ru для a.zvonaryov@volgastroy76.ru"}
+[2026-09-17 15:37:51] [MAIL_SUCCESS] Notification sent to s.tyagunov@volgastroy76.ru | {"lead_id":23,"attachments":2,"diag":"[SMTP_SUCCESS] Письмо успешно принято сервером smtp.mail.ru для s.tyagunov@volgastroy76.ru"}
+[2026-09-17 15:37:53] [MAIL_SUCCESS] Notification sent to info@volgastroy76.ru | {"lead_id":23,"attachments":2,"diag":"[SMTP_SUCCESS] Письмо успешно принято сервером smtp.mail.ru для info@volgastroy76.ru"}

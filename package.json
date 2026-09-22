@@ -10,7 +10,6 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test:calc": "tsx scripts/testCalcEngine.ts",
-    "test:admin": "tsx scripts/testAdminPanel.ts",
     "audit:rates": "tsx scripts/auditRates.ts"
   },
   "dependencies": {

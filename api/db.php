@@ -174,6 +174,7 @@ function vgs_ensure_base_schema($pdo, $isSq)
 
     // 3. Таблица администраторов (admins)
     try {
+        $lastLoginCol = $isSq ? "last_login TEXT NULL" : "last_login DATETIME NULL";
         $pdo->exec("CREATE TABLE IF NOT EXISTS admins (
             id $ai,
             username $txt NOT NULL DEFAULT '',
@@ -181,10 +182,13 @@ function vgs_ensure_base_schema($pdo, $isSq)
             password_hash $txt NOT NULL DEFAULT '',
             pass_hash $txt NOT NULL DEFAULT '',
             role $txt NOT NULL DEFAULT 'admin',
-            last_login " . ($isSq ? "TEXT NULL" : "DATETIME NULL") . "
+            $lastLoginCol,
+            created_at $dt
         )");
     } catch (Exception $e) {
-        error_log('Ошибка создания admins: ' . $e->getMessage());
+        $msg = 'DEPLOYMENT_FAILURE (admins table creation failed): ' . $e->getMessage();
+        error_log($msg);
+        throw new RuntimeException($msg, 0, $e);
     }
 
     // 4. Таблица истории действий и отмены (admin_action_history)
@@ -241,12 +245,8 @@ function vgs_ensure_base_schema($pdo, $isSq)
         error_log('Ошибка создания estimates: ' . $e->getMessage());
     }
 
-    // 6. Миграция колонок (Safe ALTER TABLE)
-    try {
-        vgs_migrate_missing_columns($pdo, $isSq);
-    } catch (Exception $e) {
-        error_log('Ошибка миграции колонок: ' . $e->getMessage());
-    }
+    // 6. Миграция колонок (Safe ALTER TABLE) - критическая операция, ошибки НЕ гасятся
+    vgs_migrate_missing_columns($pdo, $isSq);
 
     // Индексы
     if (!$isSq) {
@@ -255,6 +255,8 @@ function vgs_ensure_base_schema($pdo, $isSq)
         try { $pdo->exec("ALTER TABLE reviews ADD INDEX ix_reviews_status (status)"); } catch (Exception $e) {}
         try { $pdo->exec("ALTER TABLE estimates ADD INDEX ix_estimates_number (number)"); } catch (Exception $e) {}
         try { $pdo->exec("ALTER TABLE estimates ADD INDEX ix_estimates_status (status)"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE admins ADD INDEX ix_admins_username (username)"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE admins ADD INDEX ix_admins_login (login)"); } catch (Exception $e) {}
         try { $pdo->exec("ALTER TABLE admin_action_history ADD INDEX ix_history_entity (entity_type, entity_id)"); } catch (Exception $e) {}
     }
 }
@@ -265,44 +267,75 @@ function vgs_ensure_base_schema($pdo, $isSq)
 function vgs_migrate_missing_columns($pdo, $isSq)
 {
     if ($isSq) {
-        // SQLite: проверяем колонки через PRAGMA table_info
-        $leadCols = array();
-        $q = $pdo->query("PRAGMA table_info(leads)");
-        while ($r = $q->fetch()) {
-            $leadCols[] = $r['name'];
-        }
-        if (!in_array('calc', $leadCols, true)) {
-            $pdo->exec("ALTER TABLE leads ADD COLUMN calc TEXT NULL");
-        }
-        if (!in_array('topic', $leadCols, true)) {
-            $pdo->exec("ALTER TABLE leads ADD COLUMN topic TEXT NOT NULL DEFAULT ''");
-        }
+        try {
+            // SQLite: проверяем колонки через PRAGMA table_info
+            $leadCols = array();
+            $q = $pdo->query("PRAGMA table_info(leads)");
+            while ($r = $q->fetch()) {
+                $leadCols[] = $r['name'];
+            }
+            if (!in_array('calc', $leadCols, true)) {
+                $pdo->exec("ALTER TABLE leads ADD COLUMN calc TEXT NULL");
+            }
+            if (!in_array('topic', $leadCols, true)) {
+                $pdo->exec("ALTER TABLE leads ADD COLUMN topic TEXT NOT NULL DEFAULT ''");
+            }
 
-        $revCols = array();
-        $q = $pdo->query("PRAGMA table_info(reviews)");
-        while ($r = $q->fetch()) {
-            $revCols[] = $r['name'];
-        }
-        if (!in_array('place', $revCols, true)) {
-            $pdo->exec("ALTER TABLE reviews ADD COLUMN place TEXT NOT NULL DEFAULT ''");
-        }
-        if (!in_array('approved', $revCols, true)) {
-            $pdo->exec("ALTER TABLE reviews ADD COLUMN approved INTEGER NOT NULL DEFAULT 0");
-        }
-        if (!in_array('ip', $revCols, true)) {
-            $pdo->exec("ALTER TABLE reviews ADD COLUMN ip TEXT NOT NULL DEFAULT ''");
-        }
+            $revCols = array();
+            $q = $pdo->query("PRAGMA table_info(reviews)");
+            while ($r = $q->fetch()) {
+                $revCols[] = $r['name'];
+            }
+            if (!in_array('place', $revCols, true)) {
+                $pdo->exec("ALTER TABLE reviews ADD COLUMN place TEXT NOT NULL DEFAULT ''");
+            }
+            if (!in_array('service', $revCols, true)) {
+                $pdo->exec("ALTER TABLE reviews ADD COLUMN service TEXT NOT NULL DEFAULT ''");
+            }
+            if (!in_array('approved', $revCols, true)) {
+                $pdo->exec("ALTER TABLE reviews ADD COLUMN approved INTEGER NOT NULL DEFAULT 0");
+            }
+            if (!in_array('ip', $revCols, true)) {
+                $pdo->exec("ALTER TABLE reviews ADD COLUMN ip TEXT NOT NULL DEFAULT ''");
+            }
 
-        $adminCols = array();
-        $q = $pdo->query("PRAGMA table_info(admins)");
-        while ($r = $q->fetch()) {
-            $adminCols[] = $r['name'];
-        }
-        if (!in_array('username', $adminCols, true)) {
-            $pdo->exec("ALTER TABLE admins ADD COLUMN username TEXT NOT NULL DEFAULT ''");
-        }
-        if (!in_array('password_hash', $adminCols, true)) {
-            $pdo->exec("ALTER TABLE admins ADD COLUMN password_hash TEXT NOT NULL DEFAULT ''");
+            $adminCols = array();
+            $q = $pdo->query("PRAGMA table_info(admins)");
+            while ($r = $q->fetch()) {
+                $adminCols[] = $r['name'];
+            }
+            if (!in_array('username', $adminCols, true)) {
+                $pdo->exec("ALTER TABLE admins ADD COLUMN username TEXT NOT NULL DEFAULT ''");
+            }
+            if (!in_array('login', $adminCols, true)) {
+                $pdo->exec("ALTER TABLE admins ADD COLUMN login TEXT NOT NULL DEFAULT ''");
+            }
+            if (!in_array('password_hash', $adminCols, true)) {
+                $pdo->exec("ALTER TABLE admins ADD COLUMN password_hash TEXT NOT NULL DEFAULT ''");
+            }
+            if (!in_array('pass_hash', $adminCols, true)) {
+                $pdo->exec("ALTER TABLE admins ADD COLUMN pass_hash TEXT NOT NULL DEFAULT ''");
+            }
+            if (!in_array('role', $adminCols, true)) {
+                $pdo->exec("ALTER TABLE admins ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'");
+            }
+            if (!in_array('last_login', $adminCols, true)) {
+                $pdo->exec("ALTER TABLE admins ADD COLUMN last_login TEXT NULL");
+            }
+            if (!in_array('created_at', $adminCols, true)) {
+                $pdo->exec("ALTER TABLE admins ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+            }
+
+            // Синхронизация данных:
+            $pdo->exec("UPDATE admins SET login = username WHERE (login IS NULL OR login = '') AND (username IS NOT NULL AND username != '')");
+            $pdo->exec("UPDATE admins SET username = login WHERE (username IS NULL OR username = '') AND (login IS NOT NULL AND login != '')");
+            $pdo->exec("UPDATE admins SET password_hash = pass_hash WHERE (password_hash IS NULL OR password_hash = '') AND (pass_hash IS NOT NULL AND pass_hash != '')");
+            $pdo->exec("UPDATE admins SET pass_hash = password_hash WHERE (pass_hash IS NULL OR pass_hash = '') AND (password_hash IS NOT NULL AND password_hash != '')");
+            $pdo->exec("UPDATE admins SET role = 'admin' WHERE (role IS NULL OR role = '')");
+        } catch (Exception $e) {
+            $msg = 'DEPLOYMENT_FAILURE (SQLite schema migration error): ' . $e->getMessage();
+            error_log($msg);
+            throw new RuntimeException($msg, 0, $e);
         }
         return;
     }
@@ -375,6 +408,9 @@ function vgs_migrate_missing_columns($pdo, $isSq)
         if (!in_array('place', $revCols, true)) {
             $pdo->exec("ALTER TABLE reviews ADD COLUMN place VARCHAR(100) NOT NULL DEFAULT '' AFTER name");
         }
+        if (!in_array('service', $revCols, true)) {
+            $pdo->exec("ALTER TABLE reviews ADD COLUMN service VARCHAR(100) NOT NULL DEFAULT '' AFTER place");
+        }
         if (!in_array('approved', $revCols, true)) {
             $pdo->exec("ALTER TABLE reviews ADD COLUMN approved TINYINT NOT NULL DEFAULT 0 AFTER text");
             $pdo->exec("UPDATE reviews SET approved = 1 WHERE status = 'approved'");
@@ -384,25 +420,56 @@ function vgs_migrate_missing_columns($pdo, $isSq)
         }
 
         // Проверяем таблицу admins
+        // Минимальная production-схема:
+        // id, username, login, password_hash, pass_hash, role, last_login, created_at
         $adminCols = array();
         $q = $pdo->query("SHOW COLUMNS FROM admins");
         while ($r = $q->fetch()) {
             $adminCols[] = $r['Field'];
         }
+
         if (!in_array('username', $adminCols, true)) {
-            $pdo->exec("ALTER TABLE admins ADD COLUMN username VARCHAR(255) NOT NULL DEFAULT '' AFTER id");
-            if (in_array('login', $adminCols, true)) {
-                $pdo->exec("UPDATE admins SET username = login WHERE username = ''");
-            }
+            $pdo->exec("ALTER TABLE admins ADD COLUMN username VARCHAR(100) NOT NULL DEFAULT '' AFTER id");
+        }
+        if (!in_array('login', $adminCols, true)) {
+            $pdo->exec("ALTER TABLE admins ADD COLUMN login VARCHAR(100) NOT NULL DEFAULT '' AFTER username");
         }
         if (!in_array('password_hash', $adminCols, true)) {
-            $pdo->exec("ALTER TABLE admins ADD COLUMN password_hash VARCHAR(255) NOT NULL DEFAULT '' AFTER username");
-            if (in_array('pass_hash', $adminCols, true)) {
-                $pdo->exec("UPDATE admins SET password_hash = pass_hash WHERE password_hash = ''");
-            }
+            $pdo->exec("ALTER TABLE admins ADD COLUMN password_hash VARCHAR(255) NOT NULL DEFAULT '' AFTER login");
         }
+        if (!in_array('pass_hash', $adminCols, true)) {
+            $pdo->exec("ALTER TABLE admins ADD COLUMN pass_hash VARCHAR(255) NOT NULL DEFAULT '' AFTER password_hash");
+        }
+        if (!in_array('role', $adminCols, true)) {
+            $pdo->exec("ALTER TABLE admins ADD COLUMN role VARCHAR(50) NOT NULL DEFAULT 'admin' AFTER pass_hash");
+        }
+        if (!in_array('last_login', $adminCols, true)) {
+            $pdo->exec("ALTER TABLE admins ADD COLUMN last_login DATETIME NULL AFTER role");
+        }
+        if (!in_array('created_at', $adminCols, true)) {
+            $pdo->exec("ALTER TABLE admins ADD COLUMN created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER last_login");
+        }
+
+        // БЕЗОПАСНАЯ СИНХРОНИЗАЦИЯ:
+        // Если username уже существует: login заполнять из username (только если login пустой)
+        $pdo->exec("UPDATE admins SET login = username WHERE (login IS NULL OR login = '') AND (username IS NOT NULL AND username != '')");
+
+        // Если login уже существует: username заполнять из login (только если username пустой)
+        $pdo->exec("UPDATE admins SET username = login WHERE (username IS NULL OR username = '') AND (login IS NOT NULL AND login != '')");
+
+        // Если pass_hash уже существует: password_hash заполнять из pass_hash ТОЛЬКО если password_hash пустой
+        $pdo->exec("UPDATE admins SET password_hash = pass_hash WHERE (password_hash IS NULL OR password_hash = '') AND (pass_hash IS NOT NULL AND pass_hash != '')");
+
+        // Если password_hash уже существует: pass_hash заполнять из password_hash ТОЛЬКО если pass_hash пустой (не перезаписывая существующие хэши)
+        $pdo->exec("UPDATE admins SET pass_hash = password_hash WHERE (pass_hash IS NULL OR pass_hash = '') AND (password_hash IS NOT NULL AND password_hash != '')");
+
+        // Если role пустой: установить 'admin'
+        $pdo->exec("UPDATE admins SET role = 'admin' WHERE (role IS NULL OR role = '')");
+
     } catch (Exception $e) {
-        error_log('Ошибка vgs_migrate_missing_columns: ' . $e->getMessage());
+        $msg = 'DEPLOYMENT_FAILURE (MySQL schema migration error): ' . $e->getMessage();
+        error_log($msg);
+        throw new RuntimeException($msg, 0, $e);
     }
 }
 

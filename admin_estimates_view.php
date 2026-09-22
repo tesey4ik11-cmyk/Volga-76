@@ -327,7 +327,7 @@ if ($actEst === 'edit' && $editId > 0) {
           </div>
           <div class="form-group">
             <label>Название объекта</label>
-            <input type="text" id="inp_object_name" class="form-control" value="<?php echo h($currentEstimate['object_name'] ?? ''); ?>" placeholder="Например: Технический блок «Мурава»">
+            <input type="text" id="inp_object_name" class="form-control" value="<?php echo h($currentEstimate['object_name'] ?? ''); ?>" placeholder="Например: Модульное здание 50 м²">
           </div>
           <div class="form-group">
             <label>Площадь объекта (м²)</label>
@@ -688,30 +688,30 @@ function renderSections() {
         const isLocked = item.is_qty_locked ? 1 : 0;
         const lockIcon = isLocked ? '🔒' : '🔓';
         const lockTitle = isLocked ? 'Объем зафиксирован: не меняется при смене площади' : 'Объем рассчитывается по площади';
-        const wCost = round2((item.quantity || 1) * (item.unit_price || 0));
+        const wCost = round2((parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0));
 
         html += `
           <tr class="work-row" id="work_row_${sIdx}_${wIdx}">
             <td class="cell-name">
               <div style="display:flex;align-items:center;gap:6px">
                 <span style="color:#0284c7;font-weight:800;font-size:12px">W${wIdx+1}</span>
-                <input type="text" value="${escapeHtml(item.name)}" onchange="updateWorkField(${sIdx}, ${wIdx}, 'name', this.value)" placeholder="Наименование строительно-монтажной работы...">
+                <input type="text" value="${escapeHtml(item.name || '')}" onchange="updateWorkField(${sIdx}, ${wIdx}, 'name', this.value)" placeholder="Наименование строительно-монтажной работы...">
               </div>
             </td>
             <td class="cell-num">
               <div style="display:flex;align-items:center;gap:3px">
-                <input type="number" step="0.01" value="${item.quantity || 1}" oninput="updateWorkField(${sIdx}, ${wIdx}, 'quantity', this.value)">
+                <input type="number" step="0.01" value="${item.quantity !== undefined && item.quantity !== null ? item.quantity : ''}" oninput="updateWorkField(${sIdx}, ${wIdx}, 'quantity', this.value)" placeholder="0">
                 <button type="button" class="btn-lock ${isLocked ? 'locked' : ''}" onclick="toggleLock(${sIdx}, ${wIdx})" title="${lockTitle}">${lockIcon}</button>
               </div>
             </td>
             <td class="cell-unit">
-              <input type="text" value="${escapeHtml(item.unit || 'компл.')}" onchange="updateWorkField(${sIdx}, ${wIdx}, 'unit', this.value)">
+              <input type="text" value="${escapeHtml(item.unit || '')}" onchange="updateWorkField(${sIdx}, ${wIdx}, 'unit', this.value)" placeholder="ед.">
             </td>
             <td class="cell-num">
-              <input type="number" step="1" value="${item.cost_price || 0}" oninput="updateWorkField(${sIdx}, ${wIdx}, 'cost_price', this.value)" title="Себестоимость закупки/ФОТ">
+              <input type="number" step="1" value="${item.cost_price !== undefined && item.cost_price !== null ? item.cost_price : ''}" oninput="updateWorkField(${sIdx}, ${wIdx}, 'cost_price', this.value)" placeholder="0" title="Себестоимость закупки/ФОТ">
             </td>
             <td class="cell-num">
-              <input type="number" step="1" value="${item.unit_price || 0}" oninput="updateWorkField(${sIdx}, ${wIdx}, 'unit_price', this.value)" title="Цена продажи клиенту">
+              <input type="number" step="1" value="${item.unit_price !== undefined && item.unit_price !== null ? item.unit_price : ''}" oninput="updateWorkField(${sIdx}, ${wIdx}, 'unit_price', this.value)" placeholder="0" title="Цена продажи клиенту">
             </td>
             <td style="text-align:right;font-weight:800;color:#0f172a">
               ${formatMoney(wCost)}
@@ -726,26 +726,26 @@ function renderSections() {
         // Вложенные материалы под работой
         const materials = item.materials || [];
         materials.forEach((mat, mIdx) => {
-          const mCost = round2((mat.quantity || 1) * (mat.unit_price || 0));
+          const mCost = round2((parseFloat(mat.quantity) || 0) * (parseFloat(mat.unit_price) || 0));
           html += `
             <tr class="mat-row" id="mat_row_${sIdx}_${wIdx}_${mIdx}">
               <td class="cell-name" style="padding-left:26px">
                 <div style="display:flex;align-items:center;gap:4px">
                   <span class="mat-icon">↳</span>
-                  <input type="text" value="${escapeHtml(mat.name)}" onchange="updateMaterialField(${sIdx}, ${wIdx}, ${mIdx}, 'name', this.value)" placeholder="Наименование материала/комплектующего...">
+                  <input type="text" value="${escapeHtml(mat.name || '')}" onchange="updateMaterialField(${sIdx}, ${wIdx}, ${mIdx}, 'name', this.value)" placeholder="Наименование материала/комплектующего...">
                 </div>
               </td>
               <td class="cell-num">
-                <input type="number" step="0.01" value="${mat.quantity || 1}" oninput="updateMaterialField(${sIdx}, ${wIdx}, ${mIdx}, 'quantity', this.value)">
+                <input type="number" step="0.01" value="${mat.quantity !== undefined && mat.quantity !== null ? mat.quantity : ''}" oninput="updateMaterialField(${sIdx}, ${wIdx}, ${mIdx}, 'quantity', this.value)" placeholder="0">
               </td>
               <td class="cell-unit">
-                <input type="text" value="${escapeHtml(mat.unit || 'шт.')}" onchange="updateMaterialField(${sIdx}, ${wIdx}, ${mIdx}, 'unit', this.value)">
+                <input type="text" value="${escapeHtml(mat.unit || '')}" onchange="updateMaterialField(${sIdx}, ${wIdx}, ${mIdx}, 'unit', this.value)" placeholder="ед.">
               </td>
               <td class="cell-num">
-                <input type="number" step="1" value="${mat.cost_price || 0}" oninput="updateMaterialField(${sIdx}, ${wIdx}, ${mIdx}, 'cost_price', this.value)" title="Закупочная цена">
+                <input type="number" step="1" value="${mat.cost_price !== undefined && mat.cost_price !== null ? mat.cost_price : ''}" oninput="updateMaterialField(${sIdx}, ${wIdx}, ${mIdx}, 'cost_price', this.value)" placeholder="0" title="Закупочная цена">
               </td>
               <td class="cell-num">
-                <input type="number" step="1" value="${mat.unit_price || 0}" oninput="updateMaterialField(${sIdx}, ${wIdx}, ${mIdx}, 'unit_price', this.value)" title="Цена клиенту">
+                <input type="number" step="1" value="${mat.unit_price !== undefined && mat.unit_price !== null ? mat.unit_price : ''}" oninput="updateMaterialField(${sIdx}, ${wIdx}, ${mIdx}, 'unit_price', this.value)" placeholder="0" title="Цена клиенту">
               </td>
               <td style="text-align:right;font-weight:700;color:#334155">
                 ${formatMoney(mCost)}
@@ -821,11 +821,7 @@ function toggleLock(sIdx, wIdx) {
  */
 function updateWorkField(sIdx, wIdx, field, val) {
   const item = currentEstimateState.sections[sIdx].items[wIdx];
-  if (field === 'quantity' || field === 'cost_price' || field === 'unit_price') {
-    item[field] = parseFloat(val) || 0;
-  } else {
-    item[field] = val;
-  }
+  item[field] = val;
   recalcTotals();
 }
 
@@ -834,11 +830,7 @@ function updateWorkField(sIdx, wIdx, field, val) {
  */
 function updateMaterialField(sIdx, wIdx, mIdx, field, val) {
   const mat = currentEstimateState.sections[sIdx].items[wIdx].materials[mIdx];
-  if (field === 'quantity' || field === 'cost_price' || field === 'unit_price') {
-    mat[field] = parseFloat(val) || 0;
-  } else {
-    mat[field] = val;
-  }
+  mat[field] = val;
   recalcTotals();
 }
 
@@ -847,29 +839,26 @@ function updateSectionName(sIdx, val) {
 }
 
 function addNewSection() {
-  const num = currentEstimateState.sections.length + 1;
   currentEstimateState.sections.push({
-    name: 'РАЗДЕЛ ' + num + '. НОВЫЙ РАЗДЕЛ',
+    name: '',
     items: []
   });
   renderSections();
 }
 
 function removeSection(sIdx) {
-  if (confirm('Удалить этот раздел и все входящие в него работы и материалы?')) {
-    currentEstimateState.sections.splice(sIdx, 1);
-    renderSections();
-    recalcTotals();
-  }
+  currentEstimateState.sections.splice(sIdx, 1);
+  renderSections();
+  recalcTotals();
 }
 
 function addNewWork(sIdx) {
   currentEstimateState.sections[sIdx].items.push({
-    name: 'Новая строительно-монтажная работа',
-    unit: 'компл.',
-    quantity: 1,
-    cost_price: 1000,
-    unit_price: 2000,
+    name: '',
+    unit: '',
+    quantity: '',
+    cost_price: '',
+    unit_price: '',
     is_qty_locked: 0,
     materials: []
   });
@@ -888,11 +877,11 @@ function addNewMaterial(sIdx, wIdx) {
     currentEstimateState.sections[sIdx].items[wIdx].materials = [];
   }
   currentEstimateState.sections[sIdx].items[wIdx].materials.push({
-    name: 'Новый материал / комплектующее',
-    unit: 'шт.',
-    quantity: 1,
-    cost_price: 500,
-    unit_price: 850
+    name: '',
+    unit: '',
+    quantity: '',
+    cost_price: '',
+    unit_price: ''
   });
   renderSections();
   recalcTotals();

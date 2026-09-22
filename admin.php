@@ -77,21 +77,18 @@ if (!$logged && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['act'] ?? '') =
     $p = (string)($_POST['password'] ?? '');
     try {
         $pdo = vgs_db();
-        $st  = $pdo->prepare('SELECT * FROM admins WHERE username = ? LIMIT 1');
-        $st->execute(array($u));
+        $st  = $pdo->prepare('SELECT * FROM admins WHERE username = ? OR login = ? LIMIT 1');
+        $st->execute(array($u, $u));
         $row = $st->fetch();
-        if ($row && password_verify($p, $row['password_hash'])) {
+        $passHash = $row ? (!empty($row['password_hash']) ? $row['password_hash'] : (!empty($row['pass_hash']) ? $row['pass_hash'] : '')) : '';
+        if ($row && $passHash !== '' && password_verify($p, $passHash)) {
             session_regenerate_id(true);
             $_SESSION['vgs_admin'] = (int)$row['id'];
-            $_SESSION['vgs_name']  = $row['username'];
-            header('Location: admin.php');
-            exit;
-        }
-        // Резервная мастер-авторизация для логина admin
-        if ($u === 'admin' && $p === 'QWERTY753951') {
-            session_regenerate_id(true);
-            $_SESSION['vgs_admin'] = 1;
-            $_SESSION['vgs_name']  = 'admin';
+            $_SESSION['vgs_name']  = !empty($row['username']) ? $row['username'] : (!empty($row['login']) ? $row['login'] : 'admin');
+            try {
+                $upd = $pdo->prepare('UPDATE admins SET last_login = NOW() WHERE id = ?');
+                $upd->execute(array($row['id']));
+            } catch (Exception $e) {}
             header('Location: admin.php');
             exit;
         }

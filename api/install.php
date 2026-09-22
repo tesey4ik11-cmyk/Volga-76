@@ -95,10 +95,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     "CREATE TABLE IF NOT EXISTS admins (
                         id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                        username VARCHAR(50) NOT NULL,
-                        password_hash VARCHAR(255) NOT NULL,
+                        username VARCHAR(100) NOT NULL DEFAULT '',
+                        login VARCHAR(100) NOT NULL DEFAULT '',
+                        password_hash VARCHAR(255) NOT NULL DEFAULT '',
+                        pass_hash VARCHAR(255) NOT NULL DEFAULT '',
+                        role VARCHAR(50) NOT NULL DEFAULT 'admin',
+                        last_login DATETIME NULL,
                         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        UNIQUE KEY uq_username (username)
+                        UNIQUE KEY uq_username (username),
+                        INDEX ix_login (login)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
                 );
                 foreach ($schema as $sql) {
@@ -106,8 +111,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 $hash = password_hash($adminPass, PASSWORD_DEFAULT);
-                $ins  = $pdo->prepare('INSERT INTO admins (username, password_hash) VALUES (?, ?)');
-                $ins->execute(array($adminUser, $hash));
+                $ins  = $pdo->prepare('INSERT INTO admins (username, login, password_hash, pass_hash, role) VALUES (?, ?, ?, ?, "admin")');
+                $ins->execute(array($adminUser, $adminUser, $hash, $hash));
 
                 $cfg = array(
                     'db_host' => $dbHost,
