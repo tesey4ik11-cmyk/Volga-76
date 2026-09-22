@@ -1,8 +1,26 @@
 User-agent: *
 Allow: /
 Disallow: /admin.php
-Disallow: /install.php
+Disallow: /logout.php
+Disallow: /api/
+Disallow: /data/
+
+# Yandex bot specifics
+User-agent: Yandex
+Allow: /
+Disallow: /admin.php
+Disallow: /logout.php
+Disallow: /api/
+Disallow: /data/
+Clean-param: utm_source&utm_medium&utm_campaign&utm_content&utm_term /
+
+# Googlebot specifics
+User-agent: Googlebot
+Allow: /
+Disallow: /admin.php
+Disallow: /logout.php
 Disallow: /api/
 Disallow: /data/
 
 Sitemap: https://volgastroy76.ru/sitemap.xml
+Host: https://volgastroy76.ru
