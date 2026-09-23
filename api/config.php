@@ -4,21 +4,21 @@ if (realpath(__FILE__) === realpath($_SERVER['SCRIPT_FILENAME'] ?? '')) { http_r
 return array(
     'db_host'          => 'localhost',
     'db_port'          => 3306,
-    'db_name'          => 'cu947103_volgastroy76',
-    'db_user'          => 'cu947103_volgastroy76',
-    'db_pass'          => 'Papa1211!',
+    'db_name'          => '',
+    'db_user'          => '',
+    'db_pass'          => '',
     
     // Основной email отправителя и имя
-    'mail_from'        => 'order@volgastroy76.ru',
-    'mail_from_name'   => 'ВОЛГАСТРОЙ 76',
+    'mail_from'        => '',
+    'mail_from_name'   => '',
 
-    // Прямой SMTP для VK WorkSpace / Mail.ru / Timeweb (гарантирует 100% доставку во Входящие)
+    // Прямой SMTP 
     'smtp_enabled'     => true,
-    'smtp_host'        => 'smtp.mail.ru', // Для VK WorkSpace: smtp.mail.ru
-    'smtp_port'        => 465,            // 465 (SSL) или 587 (TLS)
-    'smtp_secure'      => 'ssl',          // 'ssl' или 'tls'
-    'smtp_user'        => 'tesey4ik@vk.com',
-    'smtp_pass'        => 'qFvFM5uultlpu1nhAPZP',             // Пароль для внешних приложений VK WorkSpace / ящика
+    'smtp_host'        => '', // 
+    'smtp_port'        => ,            // 465 (SSL) или 587 (TLS)
+    'smtp_secure'      => '',          // 'ssl' или 'tls'
+    'smtp_user'        => '',
+    'smtp_pass'        => '',             // 
     
     // Адреса получателей заявок
     'notify_emails'    => array(
@@ -29,7 +29,7 @@ return array(
     ),
 
     // Секретный ключ для запуска диагностического теста /api/test-mail.php?key=vgs76_timeweb_2026
-    'test_mail_key'    => 'vgs76_timeweb_2026',
+    'test_mail_key'    => '',
 
     'telegram_token'   => '',
     'telegram_chat_id' => '',
